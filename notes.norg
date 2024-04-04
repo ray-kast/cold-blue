@@ -5,6 +5,8 @@
 ** ( ) rate limiting
 ** ( ) request handler timeouts
 ** ( ) require TLS
+** ( ) i18n
+*** ( ) build-time bundle creation
 
 * Flows
 ** Login

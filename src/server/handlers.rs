@@ -3,11 +3,28 @@ use poem::{
     error::NotFoundError,
     handler,
     http::{header, StatusCode},
-    web::Redirect,
+    i18n::Locale,
+    web::{CsrfToken, CsrfVerifier, Form, Redirect},
     IntoResponse, Response,
 };
 
 use crate::prelude::*;
+
+trait Trans {
+    fn t(&self, key: &str) -> String;
+}
+
+impl<T: Borrow<Locale>> Trans for T {
+    fn t(&self, key: &str) -> String {
+        let locale: &Locale = self.borrow();
+        locale.text(key).unwrap_or_else(|err| {
+            if cfg!(debug_assertions) {
+                warn!(key, %err, "Localization error");
+            }
+            key.into()
+        })
+    }
+}
 
 #[repr(transparent)]
 pub struct Templated<T>(T);
@@ -34,8 +51,13 @@ impl<T> From<T> for Templated<T> {
 #[derive(Template)]
 #[template(path = "login.html")]
 pub struct LoginTemplate {
+    locale: Locale,
     csrf: String,
     error: Option<String>,
+}
+
+impl Borrow<Locale> for LoginTemplate {
+    fn borrow(&self) -> &Locale { &self.locale }
 }
 
 pub const INDEX_ROUTE: &str = "/";
@@ -44,9 +66,14 @@ pub const INDEX_ROUTE: &str = "/";
 pub fn index() -> Redirect { Redirect::permanent(LOGIN_ROUTE) }
 
 pub const LOGIN_ROUTE: &str = "/login";
-fn render_login(error: Option<String>) -> Templated<LoginTemplate> {
+fn render_login(
+    csrf: &CsrfToken,
+    locale: Locale,
+    error: Option<String>,
+) -> Templated<LoginTemplate> {
     LoginTemplate {
-        csrf: "TODO".into(),
+        locale,
+        csrf: csrf.0.clone(),
         error,
     }
     .into()
@@ -54,23 +81,52 @@ fn render_login(error: Option<String>) -> Templated<LoginTemplate> {
 
 #[handler]
 #[inline]
-pub fn get_login() -> Templated<LoginTemplate> { render_login(None) }
+pub fn get_login(csrf: &CsrfToken, locale: Locale) -> Templated<LoginTemplate> {
+    render_login(csrf, locale, None)
+}
+
+#[derive(serde::Deserialize)]
+pub struct LoginForm {
+    csrf: String,
+    username: String,
+    password: String,
+}
 
 #[handler]
-pub fn post_login() -> Response {
+pub fn post_login(
+    retry_csrf: &CsrfToken,
+    csrf_verify: &CsrfVerifier,
+    locale: Locale,
+    Form(form): Form<LoginForm>,
+) -> Response {
     let err = 'err: {
-        break 'err Some("Incorrect username or password.".into());
+        let LoginForm {
+            csrf,
+            username,
+            password,
+        } = form;
+
+        if !csrf_verify.is_valid(&csrf) || username != "admin" || password != "123" {
+            break 'err Some((
+                StatusCode::UNAUTHORIZED,
+                locale.t("login-error-unauthorized"),
+            ));
+        }
 
         None
     };
 
-    if let Some(err) = err {
-        render_login(Some(err)).into_response()
+    if let Some((status, err)) = err {
+        render_login(retry_csrf, locale, Some(err))
+            .with_status(status)
+            .into_response()
     } else {
-        todo!();
+        Redirect::temporary(USER_HOME).into_response()
     }
 }
 
+const USER_HOME: &str = "/fuck";
+
 pub async fn catch_not_found(NotFoundError: NotFoundError) -> impl IntoResponse {
-    (StatusCode::NOT_FOUND, "oops")
+    (StatusCode::NOT_FOUND, "Page not found")
 }

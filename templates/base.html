@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-{# TODO: i18n? #}
 <html lang="en-US">
   <head>
     <meta charset="utf-8">
@@ -11,7 +10,7 @@
       window.addEventListener('DOMContentLoaded', () => {
         if (!window.isSecureContext) {
           for (const el of document.querySelectorAll('[data-secure-ctx]')) {
-            el.innerHTML = `<strong>Disabled due to insecure context</strong>`;
+            el.innerHTML = `{{ self.t("insecure-warning")|markdown }}`;
           }
         }
       });
@@ -20,8 +19,7 @@
   </head>
   <body>
     <noscript>
-      <strong>WARNING:</strong> You have disabled JavaScript.  Secure context
-      integrity checks are disabled.
+      {{ self.t("noscript-warning")|markdown }}
     </noscript>
     {% block body %}{% endblock %}
   </body>

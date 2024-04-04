@@ -6,35 +6,36 @@
       <table>
         <thead>
           <tr>
-            <th scope="row" colspan="2">Login</th>
+            <th scope="row" colspan="2">{{ self.t("login-title") }}</th>
           </tr>
         </thead>
         <tbody>
           {% match error %}
           {% when Some with (err) %}
             <tr>
-              <td colspan="2"><strong>Error:</strong> {{ err }}</td>
+              <td colspan="2"><strong>{{ self.t("login-error") }}</strong> {{+ err }}</td>
             </tr>
           {% when None %}
           {% endmatch %}
           <tr>
-            <th><label for="login-user">Username</label></th>
+            <th><label for="login-user">{{ self.t("login-username") }}</label></th>
             <td>
               <input id="login-user" type="text" name="username" autocomplete="username" required autofocus>
             </td>
           </tr>
           <tr>
-            <th><label for="login-pass">Password</label></th>
+            <th><label for="login-pass">{{ self.t("login-password") }}</label></th>
             <td>
               <input id="login-pass" type="password" name="password" autocomplete="current-password" required>
             </td>
           </tr>
           <tr>
-            <td colspan="2"><input type="submit" value="Log In"></td>
+            <td colspan="2"><input type="submit" value="{{ self.t("login-submit") }}"></td>
           </tr>
         </tbody>
       </table>
     </form>
   </main>
 {% endblock body %}
+
 {# vim:set ft=htmldjango: #}

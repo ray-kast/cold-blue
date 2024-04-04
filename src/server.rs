@@ -4,7 +4,7 @@ use listenfd::ListenFd;
 use poem::{
     get,
     listener::{Listener, TcpAcceptor, TcpListener},
-    middleware::{Compression, Tracing},
+    middleware::{Compression, Csrf, Tracing},
     EndpointExt, IntoEndpoint, Route, Server,
 };
 use tokio::{sync::oneshot, task::JoinHandle};
@@ -12,6 +12,7 @@ use tokio::{sync::oneshot, task::JoinHandle};
 use crate::prelude::*;
 
 mod handlers;
+mod locale;
 
 const DEFAULT_ADDR: &str = "[::]:3000";
 
@@ -31,15 +32,19 @@ pub struct ServerHandle {
     pub stop_tx: oneshot::Sender<()>,
 }
 
+// TODO: move this to handlers?
 fn app() -> impl IntoEndpoint {
     Route::new()
         .at(handlers::INDEX_ROUTE, get(handlers::index))
         .at(
             handlers::LOGIN_ROUTE,
-            get(handlers::get_login).post(handlers::post_login),
+            get(handlers::get_login)
+                .post(handlers::post_login)
+                .with(Csrf::new()),
         )
         .catch_error(handlers::catch_not_found)
         .with((Tracing, Compression::new()))
+        .data(locale::resources())
 }
 
 #[instrument(level = "error", name = "server", skip(opts))]

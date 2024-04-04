@@ -7,7 +7,7 @@ edition = "2021"
 aes = "0.8.4"
 anyhow = "1.0.81"
 argon2 = "0.5.3"
-askama = { version = "0.12.1", features = ["markdown"] }
+askama = { version = "0.12.1", features = ["markdown", "config"] }
 atom_syndication = "0.12.2"
 atrium-api = { version = "0.20.0", features = ["tokio"] }
 atrium-xrpc-client = { version = "0.5.1", features = ["reqwest"] }
@@ -19,8 +19,9 @@ dotenvy = "0.15.7"
 futures-util = "0.3.30"
 hostname = "0.4.0"
 listenfd = "1.0.1"
-poem = { version = "3.0.0", features = ["compression"] }
+poem = { version = "3.0.0", features = ["compression", "i18n", "csrf"] }
 rss = { version = "2.0.7", features = ["atom"] }
+serde = { version = "1.0.197", features = ["derive"] }
 tokio = { version = "1.37.0", features = ["parking_lot", "tracing", "rt-multi-thread", "macros", "signal"] }
 tracing = "0.1.40"
 tracing-loki = "0.2.4"
