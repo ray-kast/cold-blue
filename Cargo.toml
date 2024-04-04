@@ -1,0 +1,29 @@
+[package]
+name = "cold-blue"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aes = "0.8.4"
+anyhow = "1.0.81"
+argon2 = "0.5.3"
+askama = { version = "0.12.1", features = ["markdown"] }
+atom_syndication = "0.12.2"
+atrium-api = { version = "0.20.0", features = ["tokio"] }
+atrium-xrpc-client = { version = "0.5.1", features = ["reqwest"] }
+axum = { version = "0.7.5", features = ["http2"] }
+cbc = "0.1.2"
+clap = { version = "4.5.4", features = ["env", "cargo", "derive", "wrap_help"] }
+diesel = { version = "2.1.5", features = ["postgres"] }
+diesel-async = { version = "0.4.1", features = ["deadpool", "postgres"] }
+dotenvy = "0.15.7"
+futures-util = "0.3.30"
+hostname = "0.4.0"
+listenfd = "1.0.1"
+rss = { version = "2.0.7", features = ["atom"] }
+tokio = { version = "1.37.0", features = ["parking_lot", "tracing", "rt-multi-thread", "macros", "signal"] }
+tower-http = { version = "0.5.2", features = ["trace", "timeout"] }
+tracing = "0.1.40"
+tracing-loki = "0.2.4"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter", "fmt", "tracing-log"] }
+url = "2.5.0"

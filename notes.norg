@@ -1,0 +1,30 @@
+* Config items
+** ( ) Allow unprivileged sign-ups
+
+* Features
+** ( ) rate limiting
+** ( ) require TLS
+
+* Flows
+** Login
+*** ( ) basic flow
+*** (x) secure context checks
+*** ( ) csrf mitigation
+** (=) Account registration *(blocked on admin create user)*
+*** (=) hide if disabled
+** Account management
+*** ( ) change username
+*** ( ) change password
+*** ( ) delete account
+** Token management
+*** ( ) rotate token
+** ATP credential management
+*** ( ) add login
+*** ( ) remove login
+*** ( ) update login (is this feasible?)
+** Feed management
+** Superuser tasks
+*** site user management
+**** ( ) create user
+**** (=) expire user password *(blocked on password change)*
+**** (=) delete user *(blocked on delete account)*

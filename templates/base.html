@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+{# TODO: i18n? #}
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="content-type" value="text/html; charset=utf-8">
+    <meta name="referrer" content="no-referrer">
+    <meta name="color-scheme" content="dark light">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script type="text/javascript">
+      window.addEventListener('DOMContentLoaded', () => {
+        if (!window.isSecureContext) {
+          for (const el of document.querySelectorAll('[data-secure-ctx]')) {
+            el.innerHTML = `<strong>Disabled due to insecure context</strong>`;
+          }
+        }
+      });
+    </script>
+    {% block head %}{% endblock %}
+  </head>
+  <body>
+    <noscript>
+      <strong>WARNING:</strong> You have disabled JavaScript.  Secure context
+      integrity checks are disabled.
+    </noscript>
+    {% block body %}{% endblock %}
+  </body>
+</html>
+
+{# vim:set ft=htmldjango: #}

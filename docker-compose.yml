@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres:16-alpine
+    ports:
+      - '5337:5432'
+    environment:
+      - POSTGRES_USER=cold-blue
+      - POSTGRES_PASSWORD=dev123
+      - POSTGRES_DB=cold-blue
+    volumes:
+      - 'db_data:/var/lib/postgresql/data'
+
+volumes:
+  db_data:
