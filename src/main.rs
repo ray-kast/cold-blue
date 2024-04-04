@@ -14,8 +14,8 @@
 #![warn(clippy::pedantic, missing_docs)]
 #![allow(clippy::module_name_repetitions)]
 
-pub(crate) mod server;
 pub(crate) mod agent;
+pub(crate) mod server;
 
 pub(crate) mod prelude {
     #![allow(unused_imports)]
@@ -233,10 +233,7 @@ mod entry {
             agent,
         } = opts;
 
-        let (server, agent) = tokio::join!(
-            crate::server::run(server),
-            crate::agent::run(agent),
-        );
+        let (server, agent) = tokio::join!(crate::server::run(server), crate::agent::run(agent),);
         let server = server?;
         let () = agent?;
         let signal;

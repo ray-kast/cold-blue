@@ -1,7 +1,10 @@
 use askama::Template;
-use axum::{
+use poem::{
+    error::NotFoundError,
+    handler,
     http::{header, StatusCode},
-    response::{IntoResponse, Redirect, Response},
+    web::Redirect,
+    IntoResponse, Response,
 };
 
 use crate::prelude::*;
@@ -9,10 +12,12 @@ use crate::prelude::*;
 #[repr(transparent)]
 pub struct Templated<T>(T);
 
-impl<T: Template> IntoResponse for Templated<T> {
+impl<T: Template + Send> IntoResponse for Templated<T> {
     fn into_response(self) -> Response {
         match self.0.render() {
-            Ok(body) => ([(header::CONTENT_TYPE, T::MIME_TYPE)], body).into_response(),
+            Ok(body) => body
+                .with_header(header::CONTENT_TYPE, T::MIME_TYPE)
+                .into_response(),
             Err(e) => {
                 error!(%e, "Error rendering template");
                 StatusCode::INTERNAL_SERVER_ERROR.into_response()
@@ -34,7 +39,9 @@ pub struct LoginTemplate {
 }
 
 pub const INDEX_ROUTE: &str = "/";
-pub async fn index() -> Redirect { Redirect::permanent(LOGIN_ROUTE) }
+
+#[handler]
+pub fn index() -> Redirect { Redirect::permanent(LOGIN_ROUTE) }
 
 pub const LOGIN_ROUTE: &str = "/login";
 fn render_login(error: Option<String>) -> Templated<LoginTemplate> {
@@ -45,10 +52,12 @@ fn render_login(error: Option<String>) -> Templated<LoginTemplate> {
     .into()
 }
 
+#[handler]
 #[inline]
-pub async fn get_login() -> Templated<LoginTemplate> { render_login(None) }
+pub fn get_login() -> Templated<LoginTemplate> { render_login(None) }
 
-pub async fn post_login() -> Response {
+#[handler]
+pub fn post_login() -> Response {
     let err = 'err: {
         break 'err Some("Incorrect username or password.".into());
 
@@ -62,4 +71,6 @@ pub async fn post_login() -> Response {
     }
 }
 
-pub async fn fallback() -> impl IntoResponse { (StatusCode::NOT_FOUND, "oops") }
+pub async fn catch_not_found(NotFoundError: NotFoundError) -> impl IntoResponse {
+    (StatusCode::NOT_FOUND, "oops")
+}

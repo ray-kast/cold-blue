@@ -3,6 +3,7 @@
 
 * Features
 ** ( ) rate limiting
+** ( ) request handler timeouts
 ** ( ) require TLS
 
 * Flows
