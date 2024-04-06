@@ -5,6 +5,11 @@ login-title = Login
 login-error = Error:
 login-username = Username
 login-password = Password
+login-remember = Remember this device
 login-submit = Log in
 
+login-error-invalid = There was a problem logging in, please try again.
+login-error-internal = An error occurred, please try again later or contact the site administrator.
 login-error-unauthorized = Invalid username or password.
+
+user-feeds-heading = Feeds

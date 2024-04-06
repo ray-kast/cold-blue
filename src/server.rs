@@ -1,18 +1,21 @@
-use std::time::Duration;
+use std::{path::PathBuf, time::Duration};
 
 use listenfd::ListenFd;
 use poem::{
-    get,
     listener::{Listener, TcpAcceptor, TcpListener},
-    middleware::{Compression, Csrf, Tracing},
-    EndpointExt, IntoEndpoint, Route, Server,
+    middleware::{Compression, Tracing},
+    EndpointExt, Server,
 };
 use tokio::{sync::oneshot, task::JoinHandle};
 
+use self::session::SessionManager;
 use crate::prelude::*;
 
+mod creds;
 mod handlers;
 mod locale;
+mod session;
+mod user;
 
 const DEFAULT_ADDR: &str = "[::]:3000";
 
@@ -25,6 +28,14 @@ pub struct ServerOpts {
     /// Timeout for HTTP request handlers
     #[arg(long, env, default_value = "10")]
     shutdown_timeout: u64,
+
+    /// PEM file containing an EdDSA key for JWT signing
+    #[arg(long, env)]
+    jwt_key: PathBuf,
+
+    /// base64-encoded encryption key for JWT encryption
+    #[arg(long, env)]
+    session_key: String,
 }
 
 pub struct ServerHandle {
@@ -32,28 +43,17 @@ pub struct ServerHandle {
     pub stop_tx: oneshot::Sender<()>,
 }
 
-// TODO: move this to handlers?
-fn app() -> impl IntoEndpoint {
-    Route::new()
-        .at(handlers::INDEX_ROUTE, get(handlers::index))
-        .at(
-            handlers::LOGIN_ROUTE,
-            get(handlers::get_login)
-                .post(handlers::post_login)
-                .with(Csrf::new()),
-        )
-        .catch_error(handlers::catch_not_found)
-        .with((Tracing, Compression::new()))
-        .data(locale::resources())
-}
-
 #[instrument(level = "error", name = "server", skip(opts))]
 pub async fn run(opts: ServerOpts) -> Result<ServerHandle> {
     let ServerOpts {
         listen_on,
         shutdown_timeout,
-        ..
+        jwt_key,
+        session_key,
     } = opts;
+
+    let sessions =
+        SessionManager::new(jwt_key, &session_key).context("Error initializing session manager")?;
 
     let mut listenfd = ListenFd::from_env();
     let sock = listenfd
@@ -86,7 +86,7 @@ pub async fn run(opts: ServerOpts) -> Result<ServerHandle> {
             // TODO: why does this need to be wrapped in an async block?
             Server::new_with_acceptor(acceptor)
                 .run_with_graceful_shutdown(
-                    app(),
+                    handlers::route(sessions).with((Tracing, Compression::new())),
                     rx.map_ok_or_else(|_| (), |()| ()),
                     Some(Duration::from_secs(shutdown_timeout)),
                 )

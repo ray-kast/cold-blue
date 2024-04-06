@@ -1,14 +1,37 @@
 use askama::Template;
 use poem::{
     error::NotFoundError,
-    handler,
+    get, handler,
     http::{header, StatusCode},
     i18n::Locale,
-    web::{CsrfToken, CsrfVerifier, Form, Redirect},
-    IntoResponse, Response,
+    middleware::{CookieJarManager, Csrf},
+    web::{cookie::CookieJar, CsrfToken, CsrfVerifier, Data, Form, Redirect},
+    EndpointExt, IntoEndpoint, IntoResponse, Response, Route,
 };
 
+use super::{
+    locale,
+    session::{AuthError, AuthForm, Session, SessionManager},
+};
 use crate::prelude::*;
+
+mod user;
+
+pub fn route(sessions: SessionManager) -> impl IntoEndpoint {
+    // NOTE: .nest() and .nest_no_strip() are literally backwards from what the
+    //       docs indicate their behavior should be.  whyyyy,,
+    Route::new()
+        .at(INDEX_ROUTE, get(index))
+        .at(
+            LOGIN_ROUTE,
+            get(get_login).post(post_login).with(Csrf::new()),
+        )
+        .nest_no_strip(user::INDEX_ROUTE, user::route())
+        .catch_error(catch_not_found)
+        .data(locale::resources())
+        .data(sessions)
+        .with(CookieJarManager::new())
+}
 
 trait Trans {
     fn t(&self, key: &str) -> String;
@@ -56,6 +79,7 @@ pub struct LoginTemplate {
     error: Option<String>,
 }
 
+// TODO: either derive this or change the templates to use locale.t()
 impl Borrow<Locale> for LoginTemplate {
     fn borrow(&self) -> &Locale { &self.locale }
 }
@@ -66,6 +90,7 @@ pub const INDEX_ROUTE: &str = "/";
 pub fn index() -> Redirect { Redirect::permanent(LOGIN_ROUTE) }
 
 pub const LOGIN_ROUTE: &str = "/login";
+
 fn render_login(
     csrf: &CsrfToken,
     locale: Locale,
@@ -85,47 +110,33 @@ pub fn get_login(csrf: &CsrfToken, locale: Locale) -> Templated<LoginTemplate> {
     render_login(csrf, locale, None)
 }
 
-#[derive(serde::Deserialize)]
-pub struct LoginForm {
-    csrf: String,
-    username: String,
-    password: String,
-}
-
 #[handler]
 pub fn post_login(
     retry_csrf: &CsrfToken,
     csrf_verify: &CsrfVerifier,
     locale: Locale,
-    Form(form): Form<LoginForm>,
+    form: poem::Result<Form<AuthForm>>,
+    sessions: Data<&SessionManager>,
+    cookies: &CookieJar,
 ) -> Response {
-    let err = 'err: {
-        let LoginForm {
-            csrf,
-            username,
-            password,
-        } = form;
+    match sessions.auth(csrf_verify, form, cookies) {
+        Ok(Session) => Redirect::see_other(user::INDEX_ROUTE).into_response(),
+        Err(e) => {
+            let (status, msg) = match e {
+                AuthError::BadRequest => (StatusCode::BAD_REQUEST, "login-error-invalid"),
+                AuthError::InternalError => {
+                    (StatusCode::INTERNAL_SERVER_ERROR, "login-error-internal")
+                },
+                AuthError::Unauthorized => (StatusCode::UNAUTHORIZED, "login-error-unauthorized"),
+            };
 
-        if !csrf_verify.is_valid(&csrf) || username != "admin" || password != "123" {
-            break 'err Some((
-                StatusCode::UNAUTHORIZED,
-                locale.t("login-error-unauthorized"),
-            ));
-        }
-
-        None
-    };
-
-    if let Some((status, err)) = err {
-        render_login(retry_csrf, locale, Some(err))
-            .with_status(status)
-            .into_response()
-    } else {
-        Redirect::temporary(USER_HOME).into_response()
+            let msg = locale.t(msg);
+            render_login(retry_csrf, locale, Some(msg))
+                .with_status(status)
+                .into_response()
+        },
     }
 }
-
-const USER_HOME: &str = "/fuck";
 
 pub async fn catch_not_found(NotFoundError: NotFoundError) -> impl IntoResponse {
     (StatusCode::NOT_FOUND, "Page not found")

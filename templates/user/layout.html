@@ -1,0 +1,17 @@
+{% extends "../base.html" %}
+
+{% block body %}
+  <header id="user-header">
+    <nav id="user-nav">
+      <ul>
+        <li><a href="{{ FEEDS_ROUTE }}">Feeds</a></li>
+      </ul>
+    </nav>
+    <h1>{% block heading %}{% endblock heading %}
+  </header>
+  <main>
+    {% block content %}{% endblock content %}
+  </main>
+{% endblock body %}
+
+{# vim:set ft=htmldjango: #}
