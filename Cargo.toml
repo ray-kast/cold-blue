@@ -16,7 +16,8 @@ base64 = "0.22.0"
 chrono = { version = "0.4.37", features = ["serde"] }
 clap = { version = "4.5.4", features = ["env", "cargo", "derive", "wrap_help"] }
 const_format = "0.2.32"
-diesel = { version = "2.1.5", features = ["postgres"] }
+deadpool = { version = "0.9.5", features = ["rt_tokio_1"] }
+diesel = { version = "2.1.5", features = ["postgres", "uuid"] }
 diesel-async = { version = "0.4.1", features = ["deadpool", "postgres"] }
 dotenvy = "0.15.7"
 futures-util = "0.3.30"

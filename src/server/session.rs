@@ -8,8 +8,11 @@ use poem::web::{
 };
 use uuid::Uuid;
 
-use super::user::{Password, Username};
-use crate::prelude::*;
+use super::{
+    creds::CredentialError,
+    user::{Password, User, Username},
+};
+use crate::{db::Db, prelude::*};
 
 #[derive(Debug, thiserror::Error)]
 pub enum AuthError {
@@ -19,6 +22,15 @@ pub enum AuthError {
     InternalError,
     #[error("Invalid credentials for session auth")]
     Unauthorized,
+}
+
+impl From<CredentialError> for AuthError {
+    fn from(value: CredentialError) -> Self {
+        match value {
+            CredentialError::Internal => AuthError::InternalError,
+            CredentialError::Unauthorized => AuthError::Unauthorized,
+        }
+    }
 }
 
 #[derive(serde::Deserialize)]
@@ -96,11 +108,12 @@ impl SessionManager {
         cookies.private_with_key(&self.0.cookie_key)
     }
 
-    pub fn auth(
+    pub async fn auth(
         &self,
-        csrf_verify: &CsrfVerifier,
         form: poem::Result<Form<AuthForm>>,
+        csrf_verify: &CsrfVerifier,
         cookies: &CookieJar,
+        db: &Db,
     ) -> Result<Session, AuthError> {
         // TODO: make this more descriptive?
         let Form(AuthForm {
@@ -114,30 +127,28 @@ impl SessionManager {
             return Err(AuthError::BadRequest);
         }
 
-        // TODO: perform username and password validation
-
         let remember = match &*remember {
             "" => false,
             "on" => true,
             _ => return Err(AuthError::BadRequest),
         };
 
-        if &*username != "admin" {
-            return Err(AuthError::Unauthorized);
-        }
+        // TODO: replace the log-and-map-error pattern
+        let user = User::from_username(db, &username)
+            .await
+            .map_err(|err| {
+                error!(%err, "Error finding user to log in");
+                AuthError::InternalError
+            })
+            .and_then(|u| u.ok_or(AuthError::Unauthorized))?;
 
-        if &*password != "123" {
-            return Err(AuthError::Unauthorized);
-        }
-
-        // let key = CredentialKey::derive_for_auth(&password, todo!())
-
+        let cred_key = user.get_credential_key(&password)?;
         let expires = Utc::now() + chrono::Duration::days(if remember { 30 } else { 1 });
 
         // TODO: assert that we have valid credentials before returning
         let claims = Claims {
-            id: Uuid::new_v4(), // TODO
-            key: [].into(),
+            id: *user.id(), // TODO
+            key: unsafe { cred_key.into_inner().to_vec() },
             expires,
         };
 

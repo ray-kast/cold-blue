@@ -13,11 +13,11 @@ use super::{
     locale,
     session::{AuthError, AuthForm, Session, SessionManager},
 };
-use crate::prelude::*;
+use crate::{db::Db, prelude::*};
 
 mod user;
 
-pub fn route(sessions: SessionManager) -> impl IntoEndpoint {
+pub fn route() -> impl IntoEndpoint {
     // NOTE: .nest() and .nest_no_strip() are literally backwards from what the
     //       docs indicate their behavior should be.  whyyyy,,
     Route::new()
@@ -29,7 +29,6 @@ pub fn route(sessions: SessionManager) -> impl IntoEndpoint {
         .nest_no_strip(user::INDEX_ROUTE, user::route())
         .catch_error(catch_not_found)
         .data(locale::resources())
-        .data(sessions)
         .with(CookieJarManager::new())
 }
 
@@ -111,15 +110,16 @@ pub fn get_login(csrf: &CsrfToken, locale: Locale) -> Templated<LoginTemplate> {
 }
 
 #[handler]
-pub fn post_login(
+pub async fn post_login(
     retry_csrf: &CsrfToken,
     csrf_verify: &CsrfVerifier,
     locale: Locale,
     form: poem::Result<Form<AuthForm>>,
     sessions: Data<&SessionManager>,
     cookies: &CookieJar,
+    db: Data<&Db>,
 ) -> Response {
-    match sessions.auth(csrf_verify, form, cookies) {
+    match sessions.auth(form, csrf_verify, cookies, &db).await {
         Ok(Session) => Redirect::see_other(user::INDEX_ROUTE).into_response(),
         Err(e) => {
             let (status, msg) = match e {

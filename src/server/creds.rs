@@ -2,16 +2,11 @@ use super::user::{self, Password};
 use crate::prelude::*;
 
 #[derive(Debug, thiserror::Error)]
-#[error("{0}")]
-#[repr(transparent)]
-pub struct CredentialError(#[from] ErrorInner);
-
-#[derive(Debug, thiserror::Error)]
-enum ErrorInner {
-    #[error("Error in generate")]
-    Generate,
-    #[error("Error in derive_for_auth")]
-    DeriveForAuth,
+pub enum CredentialError {
+    #[error("Internal error processing credentials")]
+    Internal,
+    #[error("Unauthorized credentials operation")]
+    Unauthorized,
 }
 
 const KEY_SIZE: usize = 32;
@@ -27,12 +22,12 @@ pub struct CredentialKeyParams {
 }
 
 impl CredentialKey {
-    pub fn generate(password: &Password) -> Result<(Self, CredentialKeyParams), CredentialError> {
+    pub unsafe fn generate(password: &Password) -> Result<(Self, CredentialKeyParams), CredentialError> {
         todo!()
     }
 
     // TODO: zeroize
-    pub fn derive_for_auth(
+    pub unsafe fn derive_for_auth(
         password: &Password,
         params: &CredentialKeyParams,
     ) -> Result<Self, CredentialError> {
@@ -42,7 +37,7 @@ impl CredentialKey {
             .hash_password_into(password.as_bytes(), &params.salt, &mut key)
             .map_err(|err| {
                 error!(%err, "Error deriving key with argon2");
-                CredentialError(ErrorInner::DeriveForAuth)
+                CredentialError::Internal
             })?;
 
         Ok(Self(key))

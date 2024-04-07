@@ -1,19 +1,18 @@
 //! Entry point for `cold-blue`
 
-// TODO: this is basically a duplicate of the-q/entry.rs, can this be made into
-//       a utility crate?
-
 #![deny(
     clippy::disallowed_methods,
     clippy::suspicious,
     clippy::style,
-    clippy::clone_on_ref_ptr,
-    missing_debug_implementations,
-    missing_copy_implementations
+    clippy::clone_on_ref_ptr
 )]
 #![warn(clippy::pedantic, missing_docs)]
 #![allow(clippy::module_name_repetitions)]
 
+// TODO: this is basically a duplicate of the-q/entry.rs, can this be made into
+//       a utility crate?
+
+pub(crate) mod db;
 pub(crate) mod agent;
 pub(crate) mod server;
 
@@ -183,25 +182,23 @@ mod entry {
 
         let def = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |inf| {
-            use std::any::Any;
-
-            fn downcast(payload: &dyn Any) -> &str {
-                if let Some(s) = payload.downcast_ref::<&'static str>() {
-                    return s;
-                }
-
-                if let Some(s) = payload.downcast_ref::<String>() {
-                    return s.as_str();
-                }
-
-                "Box<dyn Any>"
-            }
-
             def(inf);
 
             let thread = std::thread::current();
             let location = inf.location().map_or_else(String::new, ToString::to_string);
-            let payload = downcast(inf.payload());
+            let payload = 'found: {
+                let payload = inf.payload();
+
+                if let Some(s) = payload.downcast_ref::<&'static str>() {
+                    break 'found *s;
+                }
+
+                if let Some(s) = payload.downcast_ref::<String>() {
+                    break 'found s.as_str();
+                }
+
+                "Box<dyn Any>"
+            };
 
             error!(name = thread.name(), payload, %location, "Thread panicked!");
         }));

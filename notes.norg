@@ -27,6 +27,7 @@
 *** ( ) logout on invalid session cookie
 *** ( ) auto-redirect on valid session cookie
 *** ( ) rehash password and rederive keys for outdated params
+*** ( ) enforce expiry of session tokens
 ** (=) Account registration *(blocked on admin create user)*
 *** (=) hide if disabled
 ** Account management

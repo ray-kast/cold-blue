@@ -9,7 +9,10 @@ use poem::{
 use tokio::{sync::oneshot, task::JoinHandle};
 
 use self::session::SessionManager;
-use crate::prelude::*;
+use crate::{
+    db::{Db, DbOpts},
+    prelude::*,
+};
 
 mod creds;
 mod handlers;
@@ -36,6 +39,9 @@ pub struct ServerOpts {
     /// base64-encoded encryption key for JWT encryption
     #[arg(long, env)]
     session_key: String,
+
+    #[command(flatten)]
+    db: DbOpts,
 }
 
 pub struct ServerHandle {
@@ -50,10 +56,18 @@ pub async fn run(opts: ServerOpts) -> Result<ServerHandle> {
         shutdown_timeout,
         jwt_key,
         session_key,
+        db,
     } = opts;
 
     let sessions =
         SessionManager::new(jwt_key, &session_key).context("Error initializing session manager")?;
+
+    let db = Db::new(db).context("Error initializing database")?;
+
+    let app = handlers::route()
+        .data(sessions)
+        .data(db)
+        .with((Tracing, Compression::new()));
 
     let mut listenfd = ListenFd::from_env();
     let sock = listenfd
@@ -86,7 +100,7 @@ pub async fn run(opts: ServerOpts) -> Result<ServerHandle> {
             // TODO: why does this need to be wrapped in an async block?
             Server::new_with_acceptor(acceptor)
                 .run_with_graceful_shutdown(
-                    handlers::route(sessions).with((Tracing, Compression::new())),
+                    app,
                     rx.map_ok_or_else(|_| (), |()| ()),
                     Some(Duration::from_secs(shutdown_timeout)),
                 )
