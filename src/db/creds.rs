@@ -29,16 +29,17 @@ impl CredentialKey {
     // TODO: zeroize
     pub unsafe fn derive_for_auth(
         password: &Password,
-        params: &CredentialKeyParams,
+        params: (),
     ) -> Result<Self, CredentialError> {
         let mut key = [0_u8; KEY_SIZE];
-        // TODO: !!!!store and use fixed argon2 parameters!!!!
-        user::argon2()
-            .hash_password_into(password.as_bytes(), &params.salt, &mut key)
-            .map_err(|err| {
-                error!(%err, "Error deriving key with argon2");
-                CredentialError::Internal
-            })?;
+        // // TODO: !!!!store and use fixed argon2 parameters!!!!
+        // user::argon2()
+        //     .hash_password_into(password.as_bytes(), &params.salt, &mut key)
+        //     .map_err(|err| {
+        //         error!(%err, "Error deriving key with argon2");
+        //         CredentialError::Internal
+        //     })?;
+        error!("KEY DERIVATION IS NOT IMPLEMENTED. DO NOT TRUST.");
 
         Ok(Self(key))
     }

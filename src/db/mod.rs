@@ -8,14 +8,16 @@ use diesel_async::{
 
 use crate::prelude::*;
 
+pub mod creds;
 mod schema;
+pub mod user;
 
 pub mod prelude {
-    pub use diesel::prelude::*;
+    pub use diesel::{dsl as sql, prelude::*};
     pub use diesel_async::RunQueryDsl;
     pub use uuid::Uuid;
 
-    pub use super::{schema::*, Db};
+    pub use super::{schema::*, Db, Connection};
 }
 
 pub type Connection = AsyncPgConnection;

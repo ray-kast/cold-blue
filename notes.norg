@@ -47,5 +47,6 @@
 ** Superuser tasks
 *** site user management
 **** ( ) create user
+**** (x) create user from terminal
 **** (=) expire user password *(blocked on password change)*
 **** (=) delete user *(blocked on delete account)*

@@ -1,5 +1,9 @@
-use argon2::{Argon2, PasswordHash, PasswordVerifier};
+use argon2::{
+    password_hash::{rand_core::CryptoRngCore, SaltString},
+    Argon2, PasswordHash, PasswordHasher, PasswordVerifier,
+};
 use arrayvec::ArrayString;
+use diesel_async::RunQueryDsl;
 
 use super::creds::{CredentialError, CredentialKey};
 use crate::{db::prelude::*, prelude::*};
@@ -19,6 +23,10 @@ pub type Password = ArrayString<MAX_PASSWORD_LEN>;
 #[inline]
 pub fn argon2() -> Argon2<'static> { Argon2::default() }
 
+// TODO: choose a different rng?
+#[inline]
+pub fn rng() -> impl CryptoRngCore { argon2::password_hash::rand_core::OsRng }
+
 #[derive(Debug, Queryable, Insertable)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct User {
@@ -29,10 +37,38 @@ pub struct User {
 }
 
 impl User {
-    pub async fn from_username(db: &Db, name: &str) -> Result<Option<Self>> {
+    pub async fn create(
+        db: &mut Connection,
+        username: &Username,
+        password: &Password,
+        superuser: bool,
+    ) -> Result<Uuid> {
+        let id = Uuid::new_v4();
+        let user = Self {
+            id,
+            username: username.to_string(),
+            password: argon2()
+                .hash_password(password.as_bytes(), &SaltString::generate(&mut rng()))
+                .map_err(|err| {
+                    error!(%err, "Error generating password hash for new user");
+                    VerifyPasswordError
+                })
+                .context("Error generating password hash")?
+                .to_string(),
+            superuser,
+        };
+
+        user.insert_into(users::table)
+            .execute(db)
+            .await
+            .context("Error inserting user into database")
+            .map(|_| id)
+    }
+
+    pub async fn from_username(db: &mut Connection, name: &str) -> Result<Option<Self>> {
         users::table
             .filter(users::username.eq(name))
-            .first(&mut db.get().await?)
+            .first(db)
             .await
             .optional()
             .context("Error querying users by username")
@@ -56,6 +92,6 @@ impl User {
     ) -> Result<CredentialKey, CredentialError> {
         self.verify_password(password)
             .map_err(|VerifyPasswordError| CredentialError::Unauthorized)?;
-        unsafe { CredentialKey::derive_for_auth(password, todo!()) }
+        unsafe { CredentialKey::derive_for_auth(password, ()) }
     }
 }

@@ -14,11 +14,9 @@ use crate::{
     prelude::*,
 };
 
-mod creds;
 mod handlers;
 mod locale;
 mod session;
-mod user;
 
 const DEFAULT_ADDR: &str = "[::]:3000";
 
@@ -61,7 +59,6 @@ pub async fn run(opts: ServerOpts) -> Result<ServerHandle> {
 
     let sessions =
         SessionManager::new(jwt_key, &session_key).context("Error initializing session manager")?;
-
     let db = Db::new(db).context("Error initializing database")?;
 
     let app = handlers::route()

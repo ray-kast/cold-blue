@@ -8,11 +8,14 @@ use poem::web::{
 };
 use uuid::Uuid;
 
-use super::{
-    creds::CredentialError,
-    user::{Password, User, Username},
+use crate::{
+    db::{
+        creds::CredentialError,
+        user::{Password, User, Username},
+        Db,
+    },
+    prelude::*,
 };
-use crate::{db::Db, prelude::*};
 
 #[derive(Debug, thiserror::Error)]
 pub enum AuthError {
@@ -134,13 +137,19 @@ impl SessionManager {
         };
 
         // TODO: replace the log-and-map-error pattern
-        let user = User::from_username(db, &username)
-            .await
-            .map_err(|err| {
-                error!(%err, "Error finding user to log in");
+        let user = User::from_username(
+            &mut *db.get().await.map_err(|err| {
+                error!(%err, "Database error during login");
                 AuthError::InternalError
-            })
-            .and_then(|u| u.ok_or(AuthError::Unauthorized))?;
+            })?,
+            &username,
+        )
+        .await
+        .map_err(|err| {
+            error!(%err, "Error finding user to log in");
+            AuthError::InternalError
+        })
+        .and_then(|u| u.ok_or(AuthError::Unauthorized))?;
 
         let cred_key = user.get_credential_key(&password)?;
         let expires = Utc::now() + chrono::Duration::days(if remember { 30 } else { 1 });

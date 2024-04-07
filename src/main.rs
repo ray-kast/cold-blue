@@ -12,8 +12,9 @@
 // TODO: this is basically a duplicate of the-q/entry.rs, can this be made into
 //       a utility crate?
 
-pub(crate) mod db;
 pub(crate) mod agent;
+pub(crate) mod commands;
+pub(crate) mod db;
 pub(crate) mod server;
 
 pub(crate) mod prelude {
@@ -51,28 +52,25 @@ pub(crate) mod prelude {
 mod entry {
     use tracing_subscriber::{layer::Layered, EnvFilter};
 
-    use crate::prelude::*;
+    use crate::{commands, prelude::*};
 
     #[derive(Debug, clap::Parser)]
     #[command(version, author, about)]
     struct Opts {
         /// Log filter, using env_logger-like syntax
-        #[arg(long, env = "RUST_LOG", default_value = "info")]
+        #[arg(long, env = "RUST_LOG", default_value = "info", global = true)]
         log_filter: String,
 
         /// Grafana Loki endpoint to use
-        #[arg(long, env)]
+        #[arg(long, env, global = true)]
         loki_endpoint: Option<Url>,
 
         /// Hint for the number of threads to use
-        #[arg(short = 'j', long, env)]
+        #[arg(short = 'j', long, env, global = true)]
         threads: Option<usize>,
 
-        #[command(flatten)]
-        server: crate::server::ServerOpts,
-
-        #[command(flatten)]
-        agent: crate::agent::AgentOpts,
+        #[command(subcommand)]
+        command: commands::Command,
     }
 
     macro_rules! init_error {
@@ -131,9 +129,15 @@ mod entry {
         })
         .unwrap_or_else(|e| init_error!("Error loading .env files: {e:?}"));
 
-        let opts: Opts = clap::Parser::parse();
+        let opts = clap::Parser::parse();
         drop(span);
         let span = error_span!("boot", ?opts).entered();
+        let Opts {
+            log_filter,
+            loki_endpoint,
+            threads,
+            command,
+        } = opts;
 
         let hostname = hostname::get()
             .context("Error loading hostname")
@@ -143,7 +147,7 @@ mod entry {
             })
             .unwrap_or_else(|e| init_error!("Error getting system hostname: {e}"));
 
-        let loki_task = if let Some(endpoint) = &opts.loki_endpoint {
+        let loki_task = if let Some(endpoint) = loki_endpoint {
             let (layer, task) = tracing_loki::layer(
                 endpoint.clone(),
                 [
@@ -156,10 +160,10 @@ mod entry {
             )
             .unwrap_or_else(|err| init_error!(%err, "Error initializing Loki exporter"));
 
-            init_subscriber(&opts.log_filter, |r| r.with(layer));
+            init_subscriber(log_filter, |r| r.with(layer));
             Some(task)
         } else {
-            init_subscriber(&opts.log_filter, |r| r);
+            init_subscriber(log_filter, |r| r);
             None
         };
 
@@ -168,7 +172,7 @@ mod entry {
         let rt = {
             let mut builder = tokio::runtime::Builder::new_multi_thread();
 
-            if let Some(threads) = opts.threads {
+            if let Some(threads) = threads {
                 builder
                     .worker_threads(threads)
                     .max_blocking_threads(threads * 2);
@@ -205,104 +209,15 @@ mod entry {
 
         loki_task.map(|t| rt.spawn(t));
 
-        std::process::exit(match rt.block_on(run(opts)) {
-            Ok(()) => 0,
-            Err(e) => {
-                error!("{e:?}");
-                1
+        std::process::exit(
+            match rt.block_on(command.run().instrument(error_span!("run"))) {
+                Ok(()) => 0,
+                Err(e) => {
+                    error!("{e:?}");
+                    1
+                },
             },
-        });
-    }
-
-    enum StopType<S> {
-        Signal(S),
-        Closed(Result<Result<(), std::io::Error>, tokio::task::JoinError>),
-    }
-
-    #[allow(clippy::inline_always)]
-    #[inline(always)]
-    #[instrument(level = "error", skip(opts))]
-    async fn run(opts: Opts) -> Result {
-        let Opts {
-            log_filter: _,
-            loki_endpoint: _,
-            threads: _,
-            server,
-            agent,
-        } = opts;
-
-        let (server, agent) = tokio::join!(crate::server::run(server), crate::agent::run(agent),);
-        let server = server?;
-        let () = agent?;
-        let signal;
-
-        #[cfg(unix)]
-        {
-            use futures_util::stream::FuturesUnordered;
-            use tokio::signal::unix::SignalKind;
-
-            let mut stream = [
-                SignalKind::hangup(),
-                SignalKind::interrupt(),
-                SignalKind::quit(),
-                SignalKind::terminate(),
-            ]
-            .into_iter()
-            .map(|k| {
-                tokio::signal::unix::signal(k)
-                    .with_context(|| format!("Error hooking signal {k:?}"))
-                    .map(|mut s| async move {
-                        s.recv().await;
-                        Result::<_>::Ok(k)
-                    })
-            })
-            .collect::<Result<FuturesUnordered<_>>>()?;
-
-            signal = async move { stream.next().await.transpose() }
-        }
-
-        #[cfg(not(unix))]
-        {
-            use std::fmt;
-
-            use futures_util::TryFutureExt;
-
-            struct CtrlC;
-
-            impl fmt::Debug for CtrlC {
-                fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.write_str("^C") }
-            }
-
-            signal = tokio::signal::ctrl_c()
-                .map_ok(|()| Some(CtrlC))
-                .map_err(Into::into);
-        }
-
-        let ret = tokio::select! {
-            s = signal => StopType::Signal(s),
-            r = server.handle => StopType::Closed(r),
-        };
-
-        // let shutdown = !matches!(ret, StopType::Closed(Err(_)));
-        let shutdown = true;
-
-        let ret = match ret {
-            StopType::Signal(Ok(Some(s))) => {
-                warn!("{s:?} received, shutting down...");
-                Ok(())
-            },
-            StopType::Signal(Ok(None)) => Err(anyhow!("Unexpected error from signal handler")),
-            StopType::Signal(Err(e)) => Err(e),
-            StopType::Closed(Err(e)) => Err(e).context("Server task panicked"),
-            StopType::Closed(Ok(Err(e))) => Err(e).context("Fatal server error occurred"),
-            StopType::Closed(Ok(Ok(()))) => Err(anyhow!("Server hung up unexpectedly")),
-        };
-
-        if shutdown {
-            server.stop_tx.send(()).ok();
-        }
-
-        ret
+        );
     }
 }
 
