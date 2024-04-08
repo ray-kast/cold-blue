@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     db::{
-        creds::CredentialError,
+        creds::{CredentialError, CredentialManager},
         user::{Password, User, Username},
         Db,
     },
@@ -116,6 +116,7 @@ impl SessionManager {
         form: poem::Result<Form<AuthForm>>,
         csrf_verify: &CsrfVerifier,
         cookies: &CookieJar,
+        creds: &CredentialManager,
         db: &Db,
     ) -> Result<Session, AuthError> {
         // TODO: make this more descriptive?
@@ -151,7 +152,7 @@ impl SessionManager {
         })
         .and_then(|u| u.ok_or(AuthError::Unauthorized))?;
 
-        let cred_key = user.get_credential_key(&password)?;
+        let cred_key = user.get_credential_key(creds, &password)?;
         let expires = Utc::now() + chrono::Duration::days(if remember { 30 } else { 1 });
 
         // TODO: assert that we have valid credentials before returning

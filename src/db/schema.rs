@@ -23,6 +23,7 @@ diesel::table! {
         #[max_length = 512]
         password -> Varchar,
         superuser -> Bool,
+        key_params -> Text,
     }
 }
 

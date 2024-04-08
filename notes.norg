@@ -1,7 +1,7 @@
 * Config items
 ** ( ) Allow unprivileged sign-ups
 
-* Features
+* Tasks
 ** ( ) unit test everything on this list
 *** ( ) set up property testing
 *** ( ) can i do i18n coverage tests?  probably not...
@@ -14,11 +14,12 @@
 *** ( ) localize error handlers
 ** ( ) PLEASE learn how to securely load secrets...
 ** ( ) ensure any argon2 hackery has parity with the first-party PHC generator
+** ( ) go through the TODO comments
 
 * Flows
 ** Login
 *** (x) basic flow
-*** ( ) the actual cryptography
+*** (x) the actual cryptography
 *** (x) secure context checks
 *** (x) csrf mitigation
 *** ( ) USE ZEROIZE TO ENSURE PASSWORDS ARE WIPED FROM RAM
@@ -28,6 +29,7 @@
 *** ( ) auto-redirect on valid session cookie
 *** ( ) rehash password and rederive keys for outdated params
 *** ( ) enforce expiry of session tokens
+*** ( ) leverage argon2 secrets
 ** (=) Account registration *(blocked on admin create user)*
 *** (=) hide if disabled
 ** Account management
@@ -38,12 +40,15 @@
 ** Token management
 *** ( ) rotate token
 ** General credential management
-*** ( ) key derivation
+*** (x) key derivation
+*** (x) leverage argon2 secrets
 ** ATP credential management
 *** ( ) add login
 *** ( ) remove login
 *** ( ) update login (is this feasible?)
-** Feed management
+** ATP Feed management
+*** ( ) add home feed with optional algorithm
+*** ( ) add saved feed
 ** Superuser tasks
 *** site user management
 **** ( ) create user

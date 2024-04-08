@@ -13,7 +13,7 @@ use super::{
     locale,
     session::{AuthError, AuthForm, Session, SessionManager},
 };
-use crate::{db::Db, prelude::*};
+use crate::{db::{creds::CredentialManager, Db}, prelude::*};
 
 mod user;
 
@@ -117,9 +117,10 @@ pub async fn post_login(
     form: poem::Result<Form<AuthForm>>,
     sessions: Data<&SessionManager>,
     cookies: &CookieJar,
+    creds: Data<&CredentialManager>,
     db: Data<&Db>,
 ) -> Response {
-    match sessions.auth(form, csrf_verify, cookies, &db).await {
+    match sessions.auth(form, csrf_verify, cookies, &creds, &db).await {
         Ok(Session) => Redirect::see_other(user::INDEX_ROUTE).into_response(),
         Err(e) => {
             let (status, msg) = match e {

@@ -55,10 +55,13 @@ impl SeedSuperuserCommand {
                         stdin()
                             .read_line(&mut s)
                             .context("Error reading username from terminal")?;
-                        eprintln!("Username: {s:?}");
-                        Username::from(s.trim())
+
+                        let username = Username::from(s.trim())
                             .map_err(CapacityError::simplify)
-                            .context("Invalid username")?
+                            .context("Invalid username")?;
+                        eprintln!("Username: {username:?}");
+
+                        username
                     };
 
                     let password = if stdin().is_terminal() && stderr().is_terminal() {
@@ -77,6 +80,7 @@ impl SeedSuperuserCommand {
                         stdin()
                             .read_to_string(&mut s)
                             .context("Error reading password from stdin")?;
+
                         info!("Read {} password byte(s) from stdin", s.len());
                         s
                     };

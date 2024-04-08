@@ -5,7 +5,7 @@ use argon2::{
 use arrayvec::ArrayString;
 use diesel_async::RunQueryDsl;
 
-use super::creds::{CredentialError, CredentialKey};
+use super::creds::{CredentialError, CredentialKey, CredentialKeyParams, CredentialManager};
 use crate::{db::prelude::*, prelude::*};
 
 #[derive(Debug, thiserror::Error)]
@@ -27,13 +27,14 @@ pub fn argon2() -> Argon2<'static> { Argon2::default() }
 #[inline]
 pub fn rng() -> impl CryptoRngCore { argon2::password_hash::rand_core::OsRng }
 
-#[derive(Debug, Queryable, Insertable)]
+#[derive(Queryable, Insertable)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct User {
     id: Uuid,
     username: String,
     password: String,
     superuser: bool,
+    key_params: CredentialKeyParams,
 }
 
 impl User {
@@ -56,6 +57,7 @@ impl User {
                 .context("Error generating password hash")?
                 .to_string(),
             superuser,
+            key_params: CredentialKeyParams::generate(),
         };
 
         user.insert_into(users::table)
@@ -88,10 +90,11 @@ impl User {
 
     pub fn get_credential_key(
         &self,
+        mgr: &CredentialManager,
         password: &Password,
     ) -> Result<CredentialKey, CredentialError> {
         self.verify_password(password)
             .map_err(|VerifyPasswordError| CredentialError::Unauthorized)?;
-        unsafe { CredentialKey::derive_for_auth(password, ()) }
+        unsafe { mgr.derive_key(&self.key_params, password) }
     }
 }

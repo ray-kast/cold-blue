@@ -10,7 +10,7 @@ use tokio::{sync::oneshot, task::JoinHandle};
 
 use self::session::SessionManager;
 use crate::{
-    db::{Db, DbOpts},
+    db::{creds::CredentialManager, Db, DbOpts},
     prelude::*,
 };
 
@@ -38,6 +38,10 @@ pub struct ServerOpts {
     #[arg(long, env)]
     session_key: String,
 
+    /// base64-encoded key derivation secret for encrypting credentials
+    #[arg(long, env)]
+    credential_secret: String,
+
     #[command(flatten)]
     db: DbOpts,
 }
@@ -54,14 +58,18 @@ pub async fn run(opts: ServerOpts) -> Result<ServerHandle> {
         shutdown_timeout,
         jwt_key,
         session_key,
+        credential_secret,
         db,
     } = opts;
 
+    let creds = CredentialManager::new(&credential_secret)
+        .context("Error initializing credential manager")?;
     let sessions =
         SessionManager::new(jwt_key, &session_key).context("Error initializing session manager")?;
     let db = Db::new(db).context("Error initializing database")?;
 
     let app = handlers::route()
+        .data(creds)
         .data(sessions)
         .data(db)
         .with((Tracing, Compression::new()));
