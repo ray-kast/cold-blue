@@ -13,7 +13,10 @@ use super::{
     locale,
     session::{AuthError, AuthForm, Session, SessionManager},
 };
-use crate::{db::{creds::CredentialManager, Db}, prelude::*};
+use crate::{
+    db::{creds::CredentialManager, Db},
+    prelude::*,
+};
 
 mod user;
 

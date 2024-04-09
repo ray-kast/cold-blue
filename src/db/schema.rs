@@ -1,7 +1,7 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
-    actors (id) {
+    credentials (id) {
         id -> Uuid,
         owner -> Uuid,
         creds -> Bytea,
@@ -11,7 +11,9 @@ diesel::table! {
 diesel::table! {
     feeds (id) {
         id -> Uuid,
-        actor -> Uuid,
+        owner -> Uuid,
+        creds -> Nullable<Uuid>,
+        params -> Nullable<Text>,
     }
 }
 
@@ -27,11 +29,12 @@ diesel::table! {
     }
 }
 
-diesel::joinable!(actors -> users (owner));
-diesel::joinable!(feeds -> actors (actor));
+diesel::joinable!(credentials -> users (owner));
+diesel::joinable!(feeds -> credentials (creds));
+diesel::joinable!(feeds -> users (owner));
 
 diesel::allow_tables_to_appear_in_same_query!(
-    actors,
+    credentials,
     feeds,
     users,
 );

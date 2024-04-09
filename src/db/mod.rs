@@ -17,7 +17,7 @@ pub mod prelude {
     pub use diesel_async::RunQueryDsl;
     pub use uuid::Uuid;
 
-    pub use super::{schema::*, Db, Connection};
+    pub use super::{schema::*, Connection, Db};
 }
 
 pub type Connection = AsyncPgConnection;

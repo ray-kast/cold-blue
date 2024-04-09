@@ -15,6 +15,7 @@
 ** ( ) PLEASE learn how to securely load secrets...
 ** ( ) ensure any argon2 hackery has parity with the first-party PHC generator
 ** ( ) go through the TODO comments
+** ( ) set up frontend preprocessing (check out SWC?)
 
 * Flows
 ** Login
