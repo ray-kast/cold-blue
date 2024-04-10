@@ -14,6 +14,7 @@ use crate::{
     prelude::*,
 };
 
+#[allow(clippy::too_many_arguments)]
 mod handlers;
 mod locale;
 mod session;
@@ -30,9 +31,13 @@ pub struct ServerOpts {
     #[arg(long, env, default_value = "10")]
     shutdown_timeout: u64,
 
-    /// PEM file containing an EdDSA key for JWT signing
+    /// PEM file containing an EdDSA private key for JWT signing
     #[arg(long, env)]
-    jwt_key: PathBuf,
+    jwt_priv_key: PathBuf,
+
+    /// PEM file containing an EdDSA public key for JWT signature verification
+    #[arg(long, env)]
+    jwt_pub_key: PathBuf,
 
     /// base64-encoded encryption key for JWT encryption
     #[arg(long, env)]
@@ -56,7 +61,8 @@ pub async fn run(opts: ServerOpts) -> Result<ServerHandle> {
     let ServerOpts {
         listen_on,
         shutdown_timeout,
-        jwt_key,
+        jwt_priv_key,
+        jwt_pub_key,
         session_key,
         credential_secret,
         db,
@@ -65,7 +71,7 @@ pub async fn run(opts: ServerOpts) -> Result<ServerHandle> {
     let creds = CredentialManager::new(&credential_secret)
         .context("Error initializing credential manager")?;
     let sessions =
-        SessionManager::new(jwt_key, &session_key).context("Error initializing session manager")?;
+        SessionManager::new(jwt_priv_key, jwt_pub_key, &session_key).context("Error initializing session manager")?;
     let db = Db::new(db).context("Error initializing database")?;
 
     let app = handlers::route()

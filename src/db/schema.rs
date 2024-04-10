@@ -4,6 +4,7 @@ diesel::table! {
     credentials (id) {
         id -> Uuid,
         owner -> Uuid,
+        nonce -> Bytea,
         creds -> Bytea,
     }
 }

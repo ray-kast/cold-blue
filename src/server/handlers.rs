@@ -11,7 +11,7 @@ use poem::{
 
 use super::{
     locale,
-    session::{AuthError, AuthForm, Session, SessionManager},
+    session::{AuthError, AuthForm, SessionManager},
 };
 use crate::{
     db::{creds::CredentialManager, Db},
@@ -27,12 +27,13 @@ pub fn route() -> impl IntoEndpoint {
         .at(INDEX_ROUTE, get(index))
         .at(
             LOGIN_ROUTE,
-            get(get_login).post(post_login).with(Csrf::new()),
+            get(get_login).post(post_login),
         )
         .nest_no_strip(user::INDEX_ROUTE, user::route())
         .catch_error(catch_not_found)
         .data(locale::resources())
         .with(CookieJarManager::new())
+        .with(Csrf::new())
 }
 
 trait Trans {
@@ -94,8 +95,8 @@ pub fn index() -> Redirect { Redirect::permanent(LOGIN_ROUTE) }
 pub const LOGIN_ROUTE: &str = "/login";
 
 fn render_login(
-    csrf: &CsrfToken,
     locale: Locale,
+    csrf: &CsrfToken,
     error: Option<String>,
 ) -> Templated<LoginTemplate> {
     LoginTemplate {
@@ -107,16 +108,24 @@ fn render_login(
 }
 
 #[handler]
-#[inline]
-pub fn get_login(csrf: &CsrfToken, locale: Locale) -> Templated<LoginTemplate> {
-    render_login(csrf, locale, None)
+pub fn get_login(
+    locale: Locale,
+    csrf: &CsrfToken,
+    sessions: Data<&SessionManager>,
+    cookies: &CookieJar,
+) -> Response {
+    if sessions.get(cookies).is_some() {
+        Redirect::see_other(user::INDEX_ROUTE).into_response()
+    } else {
+        render_login(locale, csrf, None).into_response()
+    }
 }
 
 #[handler]
 pub async fn post_login(
+    locale: Locale,
     retry_csrf: &CsrfToken,
     csrf_verify: &CsrfVerifier,
-    locale: Locale,
     form: poem::Result<Form<AuthForm>>,
     sessions: Data<&SessionManager>,
     cookies: &CookieJar,
@@ -124,7 +133,7 @@ pub async fn post_login(
     db: Data<&Db>,
 ) -> Response {
     match sessions.auth(form, csrf_verify, cookies, &creds, &db).await {
-        Ok(Session) => Redirect::see_other(user::INDEX_ROUTE).into_response(),
+        Ok(_) => Redirect::see_other(user::INDEX_ROUTE).into_response(),
         Err(e) => {
             let (status, msg) = match e {
                 AuthError::BadRequest => (StatusCode::BAD_REQUEST, "login-error-invalid"),
@@ -132,10 +141,11 @@ pub async fn post_login(
                     (StatusCode::INTERNAL_SERVER_ERROR, "login-error-internal")
                 },
                 AuthError::Unauthorized => (StatusCode::UNAUTHORIZED, "login-error-unauthorized"),
+                AuthError::AlreadyLoggedIn => (StatusCode::BAD_REQUEST, "login-error-logged-in"),
             };
 
             let msg = locale.t(msg);
-            render_login(retry_csrf, locale, Some(msg))
+            render_login(locale, retry_csrf, Some(msg))
                 .with_status(status)
                 .into_response()
         },

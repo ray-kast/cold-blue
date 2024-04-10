@@ -635,6 +635,7 @@ dependencies = [
  "tracing",
  "tracing-loki",
  "tracing-subscriber",
+ "typenum",
  "url",
  "uuid",
  "zeroize",

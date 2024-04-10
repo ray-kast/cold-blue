@@ -13,7 +13,7 @@ mod schema;
 pub mod user;
 
 pub mod prelude {
-    pub use diesel::{dsl as sql, prelude::*};
+    pub use diesel::{dsl as sql, pg::Pg, prelude::*};
     pub use diesel_async::RunQueryDsl;
     pub use uuid::Uuid;
 

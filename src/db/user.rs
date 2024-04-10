@@ -3,9 +3,8 @@ use argon2::{
     Argon2, PasswordHash, PasswordHasher, PasswordVerifier,
 };
 use arrayvec::ArrayString;
-use diesel_async::RunQueryDsl;
 
-use super::creds::{CredentialError, CredentialKey, CredentialKeyParams, CredentialManager};
+use super::creds::{CredentialError, CredentialKeyParams, CredentialManager, UserCredentialKey};
 use crate::{db::prelude::*, prelude::*};
 
 #[derive(Debug, thiserror::Error)]
@@ -28,7 +27,7 @@ pub fn argon2() -> Argon2<'static> { Argon2::default() }
 pub fn rng() -> impl CryptoRngCore { argon2::password_hash::rand_core::OsRng }
 
 #[derive(Queryable, Insertable)]
-#[diesel(check_for_backend(diesel::pg::Pg))]
+#[diesel(check_for_backend(Pg))]
 pub struct User {
     id: Uuid,
     username: String,
@@ -43,7 +42,7 @@ impl User {
         username: &Username,
         password: &Password,
         superuser: bool,
-    ) -> Result<Uuid> {
+    ) -> Result<Self> {
         let id = Uuid::new_v4();
         let user = Self {
             id,
@@ -60,11 +59,22 @@ impl User {
             key_params: CredentialKeyParams::generate(),
         };
 
-        user.insert_into(users::table)
+        (&user)
+            .insert_into(users::table)
             .execute(db)
             .await
-            .context("Error inserting user into database")
-            .map(|_| id)
+            .context("Error inserting user into database")?;
+
+        Ok(user)
+    }
+
+    pub async fn from_id(db: &mut Connection, id: &Uuid) -> Result<Option<Self>> {
+        users::table
+            .filter(users::id.eq(id))
+            .first(db)
+            .await
+            .optional()
+            .context("Error querying users by ID")
     }
 
     pub async fn from_username(db: &mut Connection, name: &str) -> Result<Option<Self>> {
@@ -79,6 +89,9 @@ impl User {
     #[inline]
     pub fn id(&self) -> &Uuid { &self.id }
 
+    #[inline]
+    pub(super) fn key_params(&self) -> &CredentialKeyParams { &self.key_params }
+
     pub fn verify_password(&self, password: &Password) -> Result<(), VerifyPasswordError> {
         argon2()
             .verify_password(
@@ -88,13 +101,12 @@ impl User {
             .map_err(|_| VerifyPasswordError)
     }
 
-    pub fn get_credential_key(
+    #[inline]
+    pub fn derive_credential_key(
         &self,
         mgr: &CredentialManager,
         password: &Password,
-    ) -> Result<CredentialKey, CredentialError> {
-        self.verify_password(password)
-            .map_err(|VerifyPasswordError| CredentialError::Unauthorized)?;
-        unsafe { mgr.derive_key(&self.key_params, password) }
+    ) -> Result<UserCredentialKey, CredentialError> {
+        mgr.derive_user_key(self, password)
     }
 }

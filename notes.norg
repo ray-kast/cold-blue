@@ -16,6 +16,7 @@
 ** ( ) ensure any argon2 hackery has parity with the first-party PHC generator
 ** ( ) go through the TODO comments
 ** ( ) set up frontend preprocessing (check out SWC?)
+** ( ) make my usages of `creds` and `credentials` consistent
 
 * Flows
 ** Login
@@ -26,8 +27,12 @@
 *** ( ) USE ZEROIZE TO ENSURE PASSWORDS ARE WIPED FROM RAM
 *** ( ) cookie consent banner?
 *** (x) add remember-me box
-*** ( ) logout on invalid session cookie
+*** (-) logout on invalid session cookie
+**** (x) redirect to /login
+**** ( ) set login redirect to current page
+**** ( ) revoke session cookie
 *** ( ) auto-redirect on valid session cookie
+**** ( ) error on POST with valid session cookie
 *** ( ) rehash password and rederive keys for outdated params
 *** ( ) enforce expiry of session tokens
 *** ( ) leverage argon2 secrets
@@ -35,14 +40,18 @@
 *** (=) hide if disabled
 ** Account management
 *** ( ) logout
+**** ( ) invalidate session token server-side on logout
+*** ( ) log out all sessions
 *** ( ) change username
 *** ( ) change password
+**** ( ) invalidate all session tokens on password change
 *** ( ) delete account
 ** Token management
 *** ( ) rotate token
 ** General credential management
 *** (x) key derivation
 *** (x) leverage argon2 secrets
+*** ( ) track exact crypto parameters used to encode creds
 ** ATP credential management
 *** ( ) add login
 *** ( ) remove login

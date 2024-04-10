@@ -89,9 +89,9 @@ impl SeedSuperuserCommand {
                         .map_err(CapacityError::simplify)
                         .context("Invalid password")?;
 
-                    let id = User::create(conn, &username, &password, true).await?;
+                    let user = User::create(conn, &username, &password, true).await?;
 
-                    info!(%id, "User successfully created");
+                    info!(id = %user.id(), "User successfully created");
 
                     Ok(())
                 }

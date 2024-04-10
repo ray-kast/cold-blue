@@ -1,11 +1,19 @@
+use aes_gcm::{
+    aead::{Aead, Payload},
+    Aes256Gcm, KeyInit,
+};
 use diesel::{
     backend::Backend, deserialize, expression::AsExpression,
     query_builder::bind_collector::RawBytesBindCollector, serialize, sql_types::Text,
 };
 use rand::RngCore;
 
-use super::user::{rng, Password};
-use crate::prelude::*;
+use super::user::{rng, Password, User, VerifyPasswordError};
+use crate::{db::prelude::*, prelude::*};
+
+mod payload;
+
+pub use payload::{AtProtoCredential, CredentialBuilder};
 
 #[derive(Debug, thiserror::Error)]
 pub enum CredentialError {
@@ -20,7 +28,6 @@ pub enum CredentialError {
 pub struct CredentialManager(Arc<CredentialManagerInternal>);
 
 struct CredentialManagerInternal {
-    // TODO: size this correctly!!
     key_secret: [u8; argon2::RECOMMENDED_SALT_LEN],
 }
 
@@ -46,12 +53,15 @@ impl CredentialManager {
     }
 
     // TODO: zeroize
-    pub unsafe fn derive_key(
+    pub fn derive_user_key<'a>(
         &self,
-        params: &CredentialKeyParams,
+        user: &'a User,
         password: &Password,
-    ) -> Result<CredentialKey, CredentialError> {
-        derive(&self.0, params, password.as_bytes()).map(CredentialKey)
+    ) -> Result<UserCredentialKey<'a>, CredentialError> {
+        user.verify_password(password)
+            .map_err(|VerifyPasswordError| CredentialError::Unauthorized)?;
+        let key = unsafe { derive(&self.0, user.key_params(), password.as_bytes()) }?;
+        Ok(UserCredentialKey(user, CredentialKey(key)))
     }
 }
 
@@ -145,15 +155,10 @@ const KEY_SIZE: usize = 32;
 #[repr(transparent)]
 pub struct CredentialKey([u8; KEY_SIZE]);
 
-impl CredentialKey {
-    #[inline]
-    pub unsafe fn into_inner(self) -> [u8; KEY_SIZE] { self.0 }
-}
-
 // TODO: test
 // TODO: make all my usages of argon2 consistent
 // TODO: should LEN be a const?
-fn derive<'a, const LEN: usize>(
+unsafe fn derive<'a, const LEN: usize>(
     mgr: &'a CredentialManagerInternal,
     params: &'a CredentialKeyParams,
     password: &'a [u8],
@@ -179,4 +184,104 @@ fn derive<'a, const LEN: usize>(
         .map_err(|_| CredentialError::Internal)?;
 
     Ok(hash)
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct UserCredentialClaims {
+    id: Uuid,
+    // TODO: zeroize
+    key: [u8; KEY_SIZE],
+}
+
+impl UserCredentialClaims {
+    #[inline]
+    pub fn id(&self) -> &Uuid { &self.id }
+
+    pub fn upgrade<'a>(&self, user: &'a User) -> Result<UserCredentialKey<'a>, CredentialError> {
+        (*user.id() == self.id)
+            .then_some(UserCredentialKey(user, CredentialKey(self.key)))
+            .ok_or(CredentialError::Unauthorized)
+    }
+}
+
+pub struct UserCredentialKey<'a>(&'a User, CredentialKey);
+
+impl<'a> UserCredentialKey<'a> {
+    pub fn claims(&self) -> UserCredentialClaims {
+        UserCredentialClaims {
+            id: *self.0.id(),
+            key: self.1.0,
+        }
+    }
+
+    fn aes(&self) -> Aes256Gcm { Aes256Gcm::new(self.1.0.as_generic()) }
+
+    fn payload<'b, M: AsRef<[u8]>>(&self, msg: &'b M) -> Payload<'b, 'a> {
+        Payload {
+            msg: msg.as_ref(),
+            aad: self.0.id().as_bytes(),
+        }
+    }
+}
+
+#[derive(Queryable, Insertable)]
+#[diesel(check_for_backend(Pg))]
+pub struct Credential {
+    id: Uuid,
+    owner: Uuid,
+    nonce: Vec<u8>,
+    creds: Vec<u8>,
+}
+
+impl Credential {
+    pub async fn create<P: Into<payload::CredentialType>>(
+        db: &mut Connection,
+        key: &UserCredentialKey<'_>,
+        payload: P,
+    ) -> Result<Self, CredentialError> {
+        let mut nonce = [0_u8; 12];
+        rng().fill_bytes(&mut nonce);
+
+        let plaintext = ron::to_string(&payload.into()).map_err(|e| CredentialError::Internal)?;
+        let ciphertext = key
+            .aes()
+            .encrypt(nonce.as_generic(), key.payload(&plaintext))
+            .map_err(|e| CredentialError::Internal)?;
+
+        let creds = Self {
+            id: Uuid::new_v4(),
+            owner: *key.0.id(),
+            nonce: nonce.to_vec(),
+            creds: ciphertext,
+        };
+
+        (&creds)
+            .insert_into(credentials::table)
+            .execute(db)
+            .await
+            .map_err(|e| CredentialError::Internal)?;
+
+        Ok(creds)
+    }
+
+    pub fn decrypt<P: TryFrom<payload::CredentialType>>(
+        &self,
+        key: &UserCredentialKey,
+    ) -> Result<P, CredentialError> {
+        let plaintext = key
+            .aes()
+            .decrypt(
+                self.nonce
+                    .try_as_generic::<12>()
+                    .map_err(|e| CredentialError::Internal)?,
+                key.payload(&self.creds),
+            )
+            .map_err(|e| CredentialError::Unauthorized)?;
+
+        let plaintext = std::str::from_utf8(&plaintext).map_err(|e| CredentialError::Internal)?;
+        ron::from_str::<payload::CredentialType>(plaintext)
+            .map_err(|e| CredentialError::Internal)?
+            .try_into()
+            .map_err(|e| CredentialError::Internal)
+    }
 }

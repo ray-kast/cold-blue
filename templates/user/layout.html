@@ -4,7 +4,8 @@
   <header id="user-header">
     <nav id="user-nav">
       <ul>
-        <li><a href="{{ FEEDS_ROUTE }}">Feeds</a></li>
+        <li><a href="{{ CREDENTIALS_ROUTE }}">{{ self.t("user-credentials-heading") }}</a></li>
+        <li><a href="{{ FEEDS_ROUTE }}">{{ self.t("user-feeds-heading") }}</a></li>
       </ul>
     </nav>
     <h1>{% block heading %}{% endblock heading %}

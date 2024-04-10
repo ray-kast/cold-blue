@@ -16,6 +16,7 @@ pub(crate) mod agent;
 pub(crate) mod commands;
 pub(crate) mod db;
 pub(crate) mod server;
+pub(crate) mod util;
 
 pub(crate) mod prelude {
     #![allow(unused_imports)]
@@ -45,6 +46,8 @@ pub(crate) mod prelude {
     };
     pub use tracing_subscriber::prelude::*;
     pub use url::Url;
+
+    pub use crate::util::{ArrayExt, SliceExt};
 
     pub type Result<T = (), E = Error> = std::result::Result<T, E>;
 }
