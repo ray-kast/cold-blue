@@ -10,6 +10,7 @@ use tokio::{sync::oneshot, task::JoinHandle};
 
 use self::session::SessionManager;
 use crate::{
+    agent::{AgentManager, AgentOpts},
     db::{creds::CredentialManager, Db, DbOpts},
     prelude::*,
 };
@@ -49,6 +50,9 @@ pub struct ServerOpts {
 
     #[command(flatten)]
     db: DbOpts,
+
+    #[command(flatten)]
+    agent: AgentOpts,
 }
 
 pub struct ServerHandle {
@@ -66,18 +70,21 @@ pub async fn run(opts: ServerOpts) -> Result<ServerHandle> {
         session_key,
         credential_secret,
         db,
+        agent,
     } = opts;
 
     let creds = CredentialManager::new(&credential_secret)
         .context("Error initializing credential manager")?;
-    let sessions =
-        SessionManager::new(jwt_priv_key, jwt_pub_key, &session_key).context("Error initializing session manager")?;
+    let sessions = SessionManager::new(jwt_priv_key, jwt_pub_key, &session_key)
+        .context("Error initializing session manager")?;
     let db = Db::new(db).context("Error initializing database")?;
+    let agents = AgentManager::new(agent);
 
     let app = handlers::route()
         .data(creds)
         .data(sessions)
         .data(db)
+        .data(agents)
         .with((Tracing, Compression::new()));
 
     let mut listenfd = ListenFd::from_env();
@@ -115,6 +122,7 @@ pub async fn run(opts: ServerOpts) -> Result<ServerHandle> {
                     rx.map_ok_or_else(|_| (), |()| ()),
                     Some(Duration::from_secs(shutdown_timeout)),
                 )
+                .in_current_span()
                 .await
         }
         .in_current_span(),

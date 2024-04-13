@@ -4,9 +4,7 @@ use poem::{
 };
 
 use crate::{
-    db::{creds::{AtProtoCredential, Credential}, user::User, Db},
-    prelude::*,
-    server::session::Session,
+    agent::AgentManager, db::{creds::{AtProtoCredential, Credential}, user::User, Db}, prelude::*, server::session::Session
 };
 
 pub fn route() -> impl IntoEndpoint {
@@ -25,8 +23,9 @@ async fn post_atproto(
     form: poem::Result<Form<AtProtoCredential>>,
     session: Data<&Session>,
     db: Data<&Db>,
+    agents: Data<&AgentManager>,
 ) -> Response {
-    create_atproto_cred(form, session, db)
+    create_atproto_cred(form, session, db, agents)
         .await
         .unwrap_or_else(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response())
 }
@@ -35,12 +34,15 @@ async fn create_atproto_cred(
     form: poem::Result<Form<AtProtoCredential>>,
     session: Data<&Session>,
     db: Data<&Db>,
+    agents: Data<&AgentManager>,
 ) -> Result<Response> {
     let Form(payload) = form.map_err(|e| anyhow!("{e}"))?;
 
     let mut db = db.get().await?;
     let user = User::from_id(&mut db, session.id()).await?.context("Invalid user")?;
     let key = session.upgrade(&user)?;
+
+    let agent = payload.login(&agents).await.context("Error verifying login")?;
 
     let cred = Credential::create(&mut db, &key, payload).await?;
 

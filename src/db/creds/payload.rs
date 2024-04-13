@@ -1,6 +1,11 @@
+use crate::{
+    agent::{Agent, AgentManager},
+    prelude::*,
+};
+
 #[derive(Default)]
 pub struct CredentialBuilder {
-    server: Option<String>,
+    server: Option<Url>,
     username: Option<String>,
     password: Option<String>,
 }
@@ -35,7 +40,7 @@ macro_rules! cb_take {
 // TODO: maybe use macros for this?
 impl CredentialBuilder {
     cb_field! {
-        server: String,
+        server: Url,
         username: String,
         password: String,
     }
@@ -93,7 +98,14 @@ credential_type! {
 // TODO: zeroize
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct AtProtoCredential {
-    server: String,
+    server: Url,
     username: String,
     password: String,
+}
+
+impl AtProtoCredential {
+    #[inline]
+    pub fn login<'a>(&'a self, mgr: &'a AgentManager) -> impl Future<Output = Result<Agent>> + 'a {
+        mgr.login(&self.server, &self.username, &self.password)
+    }
 }

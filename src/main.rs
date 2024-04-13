@@ -47,7 +47,7 @@ pub(crate) mod prelude {
     pub use tracing_subscriber::prelude::*;
     pub use url::Url;
 
-    pub use crate::util::{ArrayExt, SliceExt};
+    pub use crate::util::{ArrayExt, SliceExt, GenericArrayExt};
 
     pub type Result<T = (), E = Error> = std::result::Result<T, E>;
 }

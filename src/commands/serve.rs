@@ -5,9 +5,6 @@ use crate::prelude::*;
 pub struct ServeCommand {
     #[command(flatten)]
     server: crate::server::ServerOpts,
-
-    #[command(flatten)]
-    agent: crate::agent::AgentOpts,
 }
 
 enum StopType<S> {
@@ -17,11 +14,9 @@ enum StopType<S> {
 
 impl ServeCommand {
     pub async fn run(self) -> Result {
-        let Self { server, agent } = self;
+        let Self { server } = self;
 
-        let (server, agent) = tokio::join!(crate::server::run(server), crate::agent::run(agent),);
-        let server = server?;
-        let () = agent?;
+        let server = crate::server::run(server).await?;
         let signal;
 
         #[cfg(unix)]
