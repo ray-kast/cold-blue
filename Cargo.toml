@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 aes-gcm = { version = "0.10.3", features = ["arrayvec", "zeroize"] }
-anyhow = "1.0.81"
+anyhow = "1.0.82"
 argon2 = "0.5.3"
 arrayvec = { version = "0.7.4", features = ["serde", "zeroize"] }
 askama = { version = "0.12.1", features = ["markdown", "config"] }

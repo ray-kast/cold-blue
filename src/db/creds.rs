@@ -8,12 +8,14 @@ use diesel::{
 };
 use rand::RngCore;
 
+use self::payload::Named;
+
 use super::user::{rng, Password, User, VerifyPasswordError};
 use crate::{db::prelude::*, prelude::*};
 
 mod payload;
 
-pub use payload::{AtProtoCredential, CredentialBuilder};
+pub use payload::{AtProtoCredential, AtProtoCredentialForm, CredentialBuilder};
 
 #[derive(Debug, thiserror::Error)]
 pub enum CredentialError {
@@ -228,6 +230,7 @@ impl<'a> UserCredentialKey<'a> {
 #[diesel(check_for_backend(Pg))]
 pub struct Credential {
     id: Uuid,
+    name: String,
     owner: Uuid,
     nonce: Vec<u8>,
     creds: Vec<u8>,
@@ -237,11 +240,12 @@ impl Credential {
     pub async fn create<P: Into<payload::CredentialType>>(
         db: &mut Connection,
         key: &UserCredentialKey<'_>,
-        payload: P,
+        payload: Named<P>,
     ) -> Result<Self, CredentialError> {
         let mut nonce = [0_u8; 12];
         rng().fill_bytes(&mut nonce);
 
+        let Named { name, payload } = payload;
         let plaintext = ron::to_string(&payload.into()).map_err(|e| CredentialError::Internal)?;
         let ciphertext = key
             .aes()
@@ -250,6 +254,7 @@ impl Credential {
 
         let creds = Self {
             id: Uuid::new_v4(),
+            name,
             owner: *key.0.id(),
             nonce: nonce.to_vec(),
             creds: ciphertext,

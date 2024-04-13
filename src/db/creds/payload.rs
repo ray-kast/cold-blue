@@ -1,3 +1,5 @@
+use std::ops::{Deref, DerefMut};
+
 use crate::{
     agent::{Agent, AgentManager},
     prelude::*,
@@ -80,6 +82,29 @@ pub enum CredentialType {
     AtProto(AtProtoCredential),
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct Named<T> {
+    pub name: String,
+    #[serde(flatten)]
+    pub(super) payload: T,
+}
+
+impl<T> Deref for Named<T> {
+    type Target = T;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.payload
+    }
+}
+
+impl<T> DerefMut for Named<T> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.payload
+    }
+}
+
 macro_rules! credential_type {
     ($var:ident : $ty:ty $(, $($($rest:tt)+)?)?) => {
         impl From<$ty> for CredentialType {
@@ -94,6 +119,8 @@ macro_rules! credential_type {
 credential_type! {
     AtProto: AtProtoCredential,
 }
+
+pub type AtProtoCredentialForm = Named<AtProtoCredential>;
 
 // TODO: zeroize
 #[derive(serde::Serialize, serde::Deserialize)]

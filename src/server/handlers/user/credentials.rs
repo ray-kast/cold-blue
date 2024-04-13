@@ -4,7 +4,7 @@ use poem::{
 };
 
 use crate::{
-    agent::AgentManager, db::{creds::{AtProtoCredential, Credential}, user::User, Db}, prelude::*, server::session::Session
+    agent::AgentManager, db::{creds::{AtProtoCredential, AtProtoCredentialForm, Credential}, user::User, Db}, prelude::*, server::session::Session
 };
 
 pub fn route() -> impl IntoEndpoint {
@@ -20,7 +20,7 @@ pub const ATPROTO_ROUTE: &str = concatcp!(INDEX_ROUTE, "/atproto");
 // TODO: the return type here should not be Result
 #[handler]
 async fn post_atproto(
-    form: poem::Result<Form<AtProtoCredential>>,
+    form: poem::Result<Form<AtProtoCredentialForm>>,
     session: Data<&Session>,
     db: Data<&Db>,
     agents: Data<&AgentManager>,
@@ -31,7 +31,7 @@ async fn post_atproto(
 }
 
 async fn create_atproto_cred(
-    form: poem::Result<Form<AtProtoCredential>>,
+    form: poem::Result<Form<AtProtoCredentialForm>>,
     session: Data<&Session>,
     db: Data<&Db>,
     agents: Data<&AgentManager>,
@@ -43,7 +43,6 @@ async fn create_atproto_cred(
     let key = session.upgrade(&user)?;
 
     let agent = payload.login(&agents).await.context("Error verifying login")?;
-
     let cred = Credential::create(&mut db, &key, payload).await?;
 
     Ok(Redirect::see_other(INDEX_ROUTE).into_response())

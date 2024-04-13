@@ -3,6 +3,8 @@
 diesel::table! {
     credentials (id) {
         id -> Uuid,
+        #[max_length = 256]
+        name -> Nullable<Varchar>,
         owner -> Uuid,
         nonce -> Bytea,
         creds -> Bytea,

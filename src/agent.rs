@@ -186,10 +186,12 @@ impl Agent {
         Self(inner, PhantomData)
     }
 
+    #[inline]
+    fn agent(&self) -> &AtpAgent<MemorySessionStore, ReqwestClient> { &self.0.agent }
+
     async fn home_feed(&self) -> Result {
         let feed = self
-            .0
-            .agent
+            .agent()
             .api
             .app
             .bsky
