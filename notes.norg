@@ -17,6 +17,7 @@
 ** ( ) go through the TODO comments
 ** ( ) set up frontend preprocessing (check out SWC?)
 ** ( ) make my usages of `creds` and `credentials` consistent
+** ( ) maximize my utilization of derive_more to reduce boilerplate
 
 * Flows
 ** Login

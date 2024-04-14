@@ -19,6 +19,7 @@ clap = { version = "4.5.4", features = ["env", "cargo", "derive", "wrap_help"] }
 const_format = "0.2.32"
 dashmap = "5.5.3"
 deadpool = { version = "0.9.5", features = ["rt_tokio_1"] }
+derive_more = "0.99.17"
 diesel = { version = "2.1.5", features = ["postgres", "uuid"] }
 diesel-async = { version = "0.4.1", features = ["deadpool", "postgres"] }
 dispose = "0.5.0"

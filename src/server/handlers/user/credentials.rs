@@ -1,33 +1,120 @@
-use const_format::concatcp;
-use poem::{
-    get, handler, http::StatusCode, post, web::{Data, Form, Redirect}, IntoEndpoint, IntoResponse, Response, Route
-};
-
 use crate::{
-    agent::AgentManager, db::{creds::{AtProtoCredential, AtProtoCredentialForm, Credential}, user::User, Db}, prelude::*, server::session::Session
+    agent::AgentManager,
+    db::{
+        creds::{AtProtoCredentialForm, Credential, CredentialView},
+        user::User,
+    },
+    server::{handlers::prelude::*, session::Session},
 };
 
 pub fn route() -> impl IntoEndpoint {
-    Route::new()
-        .at(super::CREDENTIALS_ROUTE, get(super::get_credentials))
-        .at(ATPROTO_ROUTE, post(post_atproto))
+    use routes::user::credentials as routes;
+
+    Route::new().at(routes::INDEX, get(index)).at(
+        routes::ADD_ATPROTO,
+        get(get_add_atproto).post(post_add_atproto),
+    )
 }
 
-const INDEX_ROUTE: &str = super::CREDENTIALS_ROUTE;
+#[derive(Template)]
+#[template(path = "user/credentials.html")]
+pub struct IndexTemplate {
+    l: Locale,
+    creds: Vec<CredentialView>,
+}
 
-pub const ATPROTO_ROUTE: &str = concatcp!(INDEX_ROUTE, "/atproto");
+// TODO: add error handlers or something to make usage of ? nicer
 
-// TODO: the return type here should not be Result
+pub async fn load_creds(session: Data<&Session>, db: Data<&Db>) -> Result<Vec<CredentialView>> {
+    let mut db = db.get().await?;
+    let user = User::from_id(&mut db, session.id())
+        .await?
+        .context("Invalid user")?;
+
+    user.list_credentials(&mut db).await
+}
+
 #[handler]
-async fn post_atproto(
-    form: poem::Result<Form<AtProtoCredentialForm>>,
-    session: Data<&Session>,
-    db: Data<&Db>,
-    agents: Data<&AgentManager>,
+pub async fn index(l: Locale, session: Data<&Session>, db: Data<&Db>) -> Templated<IndexTemplate> {
+    let creds = load_creds(session, db).await.unwrap_or_else(|e| Vec::new());
+
+    IndexTemplate { l, creds }.into()
+}
+
+struct AddAtProto;
+
+#[derive(Template)]
+#[template(path = "user/credentials/add-atproto.html")]
+struct AddAtProtoTemplate {
+    l: Locale,
+    csrf: String,
+    error: Option<String>,
+}
+
+struct_from_request! {
+    struct AddAtProtoGet<'a> {
+        csrf: &'a CsrfToken,
+    }
+
+    struct AddAtProtoPost<'a> {
+        form: poem::Result<Form<AtProtoCredentialForm>>,
+        session: Data<&'a Session>,
+        db: Data<&'a Db>,
+        agents: Data<&'a AgentManager>,
+    }
+}
+
+impl FormHandler for AddAtProto {
+    type PostData<'a> = AddAtProtoPost<'a>;
+    type PostError = ();
+    type RenderData<'a> = AddAtProtoGet<'a>;
+    type Rendered = Templated<AddAtProtoTemplate>;
+
+    const SUCCESS_ROUTE: &'static str = routes::user::credentials::INDEX;
+
+    fn render(
+        l: Locale,
+        AddAtProtoGet { csrf }: Self::RenderData<'_>,
+        error: Option<String>,
+    ) -> Self::Rendered {
+        AddAtProtoTemplate {
+            l,
+            csrf: csrf.0.clone(),
+            error,
+        }
+        .into()
+    }
+
+    async fn post(
+        AddAtProtoPost {
+            form,
+            session,
+            db,
+            agents,
+        }: Self::PostData<'_>,
+    ) -> Result<(), Self::PostError> {
+        create_atproto_cred(form, session, db, agents)
+            .await
+            .map_err(|e| ())
+    }
+
+    fn handle_error(error: Self::PostError) -> (StatusCode, &'static str) {
+        (StatusCode::BAD_REQUEST, "add-credential-error-invalid")
+    }
+}
+
+#[handler]
+fn get_add_atproto(locale: Locale, data: AddAtProtoGet) -> impl IntoResponse {
+    form_get::<AddAtProto>(locale, data)
+}
+
+#[handler]
+async fn post_add_atproto(
+    locale: Locale,
+    render: AddAtProtoGet<'_>,
+    post: AddAtProtoPost<'_>,
 ) -> Response {
-    create_atproto_cred(form, session, db, agents)
-        .await
-        .unwrap_or_else(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response())
+    form_post::<AddAtProto>(locale, render, post).await
 }
 
 async fn create_atproto_cred(
@@ -35,15 +122,20 @@ async fn create_atproto_cred(
     session: Data<&Session>,
     db: Data<&Db>,
     agents: Data<&AgentManager>,
-) -> Result<Response> {
+) -> Result<()> {
     let Form(payload) = form.map_err(|e| anyhow!("{e}"))?;
 
     let mut db = db.get().await?;
-    let user = User::from_id(&mut db, session.id()).await?.context("Invalid user")?;
+    let user = User::from_id(&mut db, session.id())
+        .await?
+        .context("Invalid user")?;
     let key = session.upgrade(&user)?;
 
-    let agent = payload.login(&agents).await.context("Error verifying login")?;
+    let agent = payload
+        .login(&agents)
+        .await
+        .context("Error verifying login")?;
     let cred = Credential::create(&mut db, &key, payload).await?;
 
-    Ok(Redirect::see_other(INDEX_ROUTE).into_response())
+    Ok(())
 }

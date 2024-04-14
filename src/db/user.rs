@@ -4,7 +4,10 @@ use argon2::{
 };
 use arrayvec::ArrayString;
 
-use super::creds::{CredentialError, CredentialKeyParams, CredentialManager, UserCredentialKey};
+use super::creds::{
+    Credential, CredentialError, CredentialKeyParams, CredentialManager, CredentialView,
+    UserCredentialKey,
+};
 use crate::{db::prelude::*, prelude::*};
 
 #[derive(Debug, thiserror::Error)]
@@ -99,6 +102,17 @@ impl User {
                 &PasswordHash::new(&self.password).map_err(|_| VerifyPasswordError)?,
             )
             .map_err(|_| VerifyPasswordError)
+    }
+
+    pub async fn list_credentials(&self, db: &mut Connection) -> Result<Vec<CredentialView>> {
+        Ok(credentials::table
+            .filter(credentials::owner.eq(self.id))
+            .load(db)
+            .await
+            .context("Error querying credentials for user")?
+            .into_iter()
+            .map(|c: Credential| c.to_view())
+            .collect())
     }
 
     #[inline]

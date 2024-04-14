@@ -10,7 +10,7 @@
       window.addEventListener('DOMContentLoaded', () => {
         if (!window.isSecureContext) {
           for (const el of document.querySelectorAll('[data-secure-ctx]')) {
-            el.innerHTML = `{{ self.t("insecure-warning")|markdown }}`;
+            el.innerHTML = `{{ l.t("insecure-warning")|markdown }}`;
           }
         }
       });
@@ -19,7 +19,7 @@
   </head>
   <body>
     <noscript>
-      {{ self.t("noscript-warning")|markdown }}
+      {{ l.t("noscript-warning")|markdown }}
     </noscript>
     {% block body %}{% endblock %}
   </body>

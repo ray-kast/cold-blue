@@ -1,6 +1,6 @@
 use aes_gcm::{
     aead::{Aead, Payload},
-    Aes256Gcm, KeyInit,
+    Aes256Gcm, KeyInit as _,
 };
 use diesel::{
     backend::Backend, deserialize, expression::AsExpression,
@@ -9,7 +9,6 @@ use diesel::{
 use rand::RngCore;
 
 use self::payload::Named;
-
 use super::user::{rng, Password, User, VerifyPasswordError};
 use crate::{db::prelude::*, prelude::*};
 
@@ -226,11 +225,16 @@ impl<'a> UserCredentialKey<'a> {
     }
 }
 
+pub struct CredentialView {
+    pub id: String,
+    pub name: String,
+}
+
 #[derive(Queryable, Insertable)]
 #[diesel(check_for_backend(Pg))]
 pub struct Credential {
     id: Uuid,
-    name: String,
+    name: Option<String>,
     owner: Uuid,
     nonce: Vec<u8>,
     creds: Vec<u8>,
@@ -254,7 +258,7 @@ impl Credential {
 
         let creds = Self {
             id: Uuid::new_v4(),
-            name,
+            name: (!name.trim().is_empty()).then_some(name),
             owner: *key.0.id(),
             nonce: nonce.to_vec(),
             creds: ciphertext,
@@ -288,5 +292,16 @@ impl Credential {
             .map_err(|e| CredentialError::Internal)?
             .try_into()
             .map_err(|e| CredentialError::Internal)
+    }
+
+    pub fn to_view(&self) -> CredentialView {
+        use base64::prelude::*;
+
+        let id = BASE64_URL_SAFE_NO_PAD.encode(self.id.as_bytes());
+
+        CredentialView {
+            id,
+            name: self.name.clone().unwrap_or_default(),
+        }
     }
 }

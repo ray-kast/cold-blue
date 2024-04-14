@@ -8,21 +8,17 @@ use poem::{
 };
 use tokio::{sync::oneshot, task::JoinHandle};
 
-use self::session::SessionManager;
+use super::session::SessionManager;
 use crate::{
     agent::{AgentManager, AgentOpts},
     db::{creds::CredentialManager, Db, DbOpts},
     prelude::*,
 };
 
-#[allow(clippy::too_many_arguments)]
-mod handlers;
-mod locale;
-mod session;
-
 const DEFAULT_ADDR: &str = "[::]:3000";
 
 #[derive(Debug, clap::Args)]
+#[allow(clippy::doc_markdown)]
 pub struct ServerOpts {
     /// The address to bind to
     #[arg(long, env, default_value = DEFAULT_ADDR)]
@@ -80,7 +76,7 @@ pub async fn run(opts: ServerOpts) -> Result<ServerHandle> {
     let db = Db::new(db).context("Error initializing database")?;
     let agents = AgentManager::new(agent);
 
-    let app = handlers::route()
+    let app = super::handlers::route()
         .data(creds)
         .data(sessions)
         .data(db)
