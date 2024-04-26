@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{% import "macros.html" as macros %}
+
 {% block body %}
   <main>
     <form data-secure-ctx action="{{ routes::LOGIN }}" method="post">
@@ -10,13 +12,7 @@
           </tr>
         </thead>
         <tbody>
-          {% match error %}
-          {% when Some with (err) %}
-            <tr>
-              <td colspan="2"><strong>{{ l.t("error") }}</strong> {{+ err }}</td>
-            </tr>
-          {% when None %}
-          {% endmatch %}
+          {% call macros::error_2col(error) %}
           <tr>
             <th><label for="login-user">{{ l.t("login-username") }}</label></th>
             <td>
@@ -43,5 +39,3 @@
     </form>
   </main>
 {% endblock body %}
-
-  E

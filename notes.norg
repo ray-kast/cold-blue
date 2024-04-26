@@ -10,6 +10,7 @@
 ** ( ) require TLS
 ** i18n
 *** (x) set up i18n
+*** ( ) hint the currently-negotiated language
 *** ( ) build-time bundle creation
 *** ( ) localize error handlers
 ** ( ) PLEASE learn how to securely load secrets...
@@ -17,6 +18,7 @@
 ** ( ) go through the TODO comments
 ** ( ) set up frontend preprocessing (check out SWC?)
 ** ( ) make my usages of `creds` and `credentials` consistent
+*** ( ) maybe just replace `credentials` with `logins`
 ** ( ) maximize my utilization of derive_more to reduce boilerplate
 
 * Flows

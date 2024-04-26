@@ -17,16 +17,21 @@ mod routes {
     pub const LOGIN: &str = "/login";
 
     pub mod user {
-        use const_format::concatcp;
-
         pub const INDEX: &str = "/user";
-        pub const FEEDS: &str = concatcp!(INDEX, "/feeds");
 
         pub mod credentials {
             use const_format::concatcp;
 
             pub const INDEX: &str = concatcp!(super::INDEX, "/credentials");
             const ADD: &str = concatcp!(INDEX, "/add");
+            pub const ADD_ATPROTO: &str = concatcp!(ADD, "/atproto");
+        }
+
+        pub mod feeds {
+            use const_format::concatcp;
+
+            pub const INDEX: &str = concatcp!(super::INDEX, "/feeds");
+            pub const ADD: &str = concatcp!(INDEX, "/add");
             pub const ADD_ATPROTO: &str = concatcp!(ADD, "/atproto");
         }
     }
@@ -46,7 +51,7 @@ mod prelude {
     pub use super::{super::session::SessionManager, Templated};
     pub(super) use super::{form_get, form_post, routes, FormHandler, LocaleExt};
     pub use crate::{
-        db::{creds::CredentialManager, Db},
+        db::{credentials::CredentialManager, Db},
         prelude::*,
         struct_from_request,
     };
@@ -117,43 +122,66 @@ macro_rules! struct_from_request {
     };
 }
 
-trait FormHandler {
-    const SUCCESS_ROUTE: &'static str;
-
+trait FormHandler: Send + 'static {
     type RenderData<'a>: FromRequest<'a> + Send;
     type Rendered: IntoResponse;
 
     type PostData<'a>: FromRequest<'a> + Send;
-    type PostError;
+    type PostError: Send;
 
-    fn render(locale: Locale, data: Self::RenderData<'_>, error: Option<String>) -> Self::Rendered;
+    fn render(
+        locale: Locale,
+        data: Self::RenderData<'_>,
+        error: Option<String>,
+    ) -> impl Future<Output = Self::Rendered> + Send + '_;
 
-    fn post(data: Self::PostData<'_>) -> impl Future<Output = Result<(), Self::PostError>> + Send;
+    /// Returns a redirect route on success
+    fn post(
+        data: Self::PostData<'_>,
+    ) -> impl Future<Output = Result<&'static str, Self::PostError>> + Send + '_;
 
     fn handle_error(error: Self::PostError) -> (StatusCode, &'static str);
 }
 
 #[inline]
-fn form_get<T: FormHandler + 'static>(locale: Locale, data: T::RenderData<'_>) -> T::Rendered {
+fn form_get<T: FormHandler>(
+    locale: Locale,
+    data: T::RenderData<'_>,
+) -> impl Future<Output = T::Rendered> + '_ {
     T::render(locale, data, None)
 }
 
+// TODO: make this async once they fix the stupid lifetime
+//       https://github.com/rust-lang/rust/issues/100013
 #[inline]
-fn form_post<'a, T: FormHandler + 'static>(
+fn form_post<'a, T: FormHandler>(
     locale: Locale,
     render: T::RenderData<'a>,
     data: T::PostData<'a>,
 ) -> impl Future<Output = Response> + Send + 'a {
-    T::post(data).map(|r| match r {
-        Ok(()) => poem::web::Redirect::see_other(T::SUCCESS_ROUTE).into_response(),
-        Err(e) => {
+    T::post(data)
+        .map_ok(|r| poem::web::Redirect::see_other(r).into_response())
+        .or_else(|e| {
             let (status, msg) = T::handle_error(e);
             let msg = locale.t(msg);
             T::render(locale, render, Some(msg))
-                .with_status(status)
-                .into_response()
-        },
-    })
+                .map(move |r| Ok(r.with_status(status).into_response()))
+        })
+        .unwrap_or_else(|e: Infallible| match e {})
+
+    // async move {
+    //     match T::post(data).await {
+    //         Ok(()) => poem::web::Redirect::see_other(T::SUCCESS_ROUTE).into_response(),
+    //         Err(e) => {
+    //             let (status, msg) = T::handle_error(e);
+    //             let msg = locale.t(msg);
+    //             T::render(locale, render, Some(msg))
+    //                 .await
+    //                 .with_status(status)
+    //                 .into_response()
+    //         },
+    //     }
+    // }
 }
 
 // TODO: make my usage of middleware & data type names consistent with poem's?

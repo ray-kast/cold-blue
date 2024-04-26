@@ -1,7 +1,7 @@
 use crate::{
     agent::AgentManager,
     db::{
-        creds::{AtProtoCredentialForm, Credential, CredentialView},
+        credentials::{Credential, CredentialView, NamedAtProtoCredential},
         user::User,
     },
     server::{handlers::prelude::*, session::Session},
@@ -51,13 +51,22 @@ struct AddAtProtoTemplate {
     error: Option<String>,
 }
 
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AddAtProtoForm {
+    csrf: String,
+    #[serde(flatten)]
+    cred: NamedAtProtoCredential,
+}
+
 struct_from_request! {
     struct AddAtProtoGet<'a> {
         csrf: &'a CsrfToken,
     }
 
     struct AddAtProtoPost<'a> {
-        form: poem::Result<Form<AtProtoCredentialForm>>,
+        form: poem::Result<Form<AddAtProtoForm>>,
+        csrf_verify: &'a CsrfVerifier,
         session: Data<&'a Session>,
         db: Data<&'a Db>,
         agents: Data<&'a AgentManager>,
@@ -70,9 +79,7 @@ impl FormHandler for AddAtProto {
     type RenderData<'a> = AddAtProtoGet<'a>;
     type Rendered = Templated<AddAtProtoTemplate>;
 
-    const SUCCESS_ROUTE: &'static str = routes::user::credentials::INDEX;
-
-    fn render(
+    async fn render(
         l: Locale,
         AddAtProtoGet { csrf }: Self::RenderData<'_>,
         error: Option<String>,
@@ -88,13 +95,15 @@ impl FormHandler for AddAtProto {
     async fn post(
         AddAtProtoPost {
             form,
+            csrf_verify,
             session,
             db,
             agents,
         }: Self::PostData<'_>,
-    ) -> Result<(), Self::PostError> {
-        create_atproto_cred(form, session, db, agents)
+    ) -> Result<&'static str, Self::PostError> {
+        create_atproto_cred(form, csrf_verify, session, db, agents)
             .await
+            .map(|()| routes::user::credentials::INDEX)
             .map_err(|e| ())
     }
 
@@ -104,8 +113,8 @@ impl FormHandler for AddAtProto {
 }
 
 #[handler]
-fn get_add_atproto(locale: Locale, data: AddAtProtoGet) -> impl IntoResponse {
-    form_get::<AddAtProto>(locale, data)
+async fn get_add_atproto(locale: Locale, data: AddAtProtoGet<'_>) -> impl IntoResponse {
+    form_get::<AddAtProto>(locale, data).await
 }
 
 #[handler]
@@ -118,12 +127,15 @@ async fn post_add_atproto(
 }
 
 async fn create_atproto_cred(
-    form: poem::Result<Form<AtProtoCredentialForm>>,
+    form: poem::Result<Form<AddAtProtoForm>>,
+    csrf_verify: &CsrfVerifier,
     session: Data<&Session>,
     db: Data<&Db>,
     agents: Data<&AgentManager>,
 ) -> Result<()> {
-    let Form(payload) = form.map_err(|e| anyhow!("{e}"))?;
+    let Form(AddAtProtoForm { csrf, cred }) = form.map_err(|e| anyhow!("{e}"))?;
+
+    ensure!(csrf_verify.is_valid(&csrf), "Invalid CSRF token");
 
     let mut db = db.get().await?;
     let user = User::from_id(&mut db, session.id())
@@ -131,11 +143,8 @@ async fn create_atproto_cred(
         .context("Invalid user")?;
     let key = session.upgrade(&user)?;
 
-    let agent = payload
-        .login(&agents)
-        .await
-        .context("Error verifying login")?;
-    let cred = Credential::create(&mut db, &key, payload).await?;
+    let agent = cred.login(&agents).await.context("Error verifying login")?;
+    let cred = Credential::create(&mut db, &key, cred).await?;
 
     Ok(())
 }

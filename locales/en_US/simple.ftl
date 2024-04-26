@@ -31,3 +31,11 @@ add-credential-atproto-server = Login server
 add-credential-error-invalid = There was a problem adding the credential, please try again.
 
 feeds-heading = Feeds
+
+add-feed = Add feed
+add-feed-select-credentials = Select acocunt to log in as
+add-feed-next = Next
+
+add-feed-atproto = Add ATProto (Bluesky) feed
+
+add-feed-select-credentials-error-invalid = There was a problem getting your account data, please try again.

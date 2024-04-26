@@ -1,0 +1,11 @@
+{% macro error_2col(error) %}
+  {% match error %}
+  {% when Some with (err) %}
+    <tr>
+      <td colspan="2"><strong>{{ l.t("error") }}</strong> {{+ err }}</td>
+    </tr>
+  {% when None %}
+  {% endmatch %}
+{% endmacro error_2col %}
+
+{# vim:set ft=htmldjango: #}

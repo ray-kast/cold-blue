@@ -78,11 +78,13 @@ impl CredentialBuilder {
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
-pub enum CredentialType {
+#[serde(deny_unknown_fields)]
+pub enum CredentialPayload {
     AtProto(AtProtoCredential),
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Named<T> {
     pub name: String,
     #[serde(flatten)]
@@ -93,21 +95,17 @@ impl<T> Deref for Named<T> {
     type Target = T;
 
     #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.payload
-    }
+    fn deref(&self) -> &Self::Target { &self.payload }
 }
 
 impl<T> DerefMut for Named<T> {
     #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.payload
-    }
+    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.payload }
 }
 
 macro_rules! credential_type {
     ($var:ident : $ty:ty $(, $($($rest:tt)+)?)?) => {
-        impl From<$ty> for CredentialType {
+        impl From<$ty> for CredentialPayload {
             #[inline]
             fn from(val: $ty) -> Self { Self::$var(val) }
         }
@@ -120,13 +118,14 @@ credential_type! {
     AtProto: AtProtoCredential,
 }
 
-pub type AtProtoCredentialForm = Named<AtProtoCredential>;
+pub type NamedAtProtoCredential = Named<AtProtoCredential>;
 
 // TODO: zeroize
 #[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AtProtoCredential {
-    server: Url,
-    username: String,
+    pub server: Url,
+    pub username: String,
     password: String,
 }
 

@@ -47,9 +47,7 @@ impl FormHandler for Login {
     type RenderData<'a> = LoginGet<'a>;
     type Rendered = Templated<LoginTemplate>;
 
-    const SUCCESS_ROUTE: &'static str = routes::user::INDEX;
-
-    fn render(
+    async fn render(
         l: Locale,
         LoginGet { csrf }: Self::RenderData<'_>,
         error: Option<String>,
@@ -71,11 +69,11 @@ impl FormHandler for Login {
             creds,
             db,
         }: Self::PostData<'_>,
-    ) -> Result<(), Self::PostError> {
+    ) -> Result<&'static str, Self::PostError> {
         sessions
             .auth(form, csrf_verify, cookies, &creds, &db)
             .await
-            .map(|_| ())
+            .map(|_| routes::user::INDEX)
     }
 
     fn handle_error(err: Self::PostError) -> (StatusCode, &'static str) {
@@ -89,16 +87,16 @@ impl FormHandler for Login {
 }
 
 #[handler]
-pub fn get_login(
+pub async fn get_login(
     locale: Locale,
-    data: LoginGet,
+    data: LoginGet<'_>,
     sessions: Data<&SessionManager>,
     cookies: &CookieJar,
 ) -> Response {
     if sessions.get(cookies).is_some() {
         Redirect::see_other(routes::user::INDEX).into_response()
     } else {
-        form_get::<Login>(locale, data).into_response()
+        form_get::<Login>(locale, data).await.into_response()
     }
 }
 

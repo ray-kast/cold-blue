@@ -3,6 +3,11 @@
 {% block heading %}{{ l.t("feeds-heading") }}{% endblock heading %}
 {% block content %}
   hi
+  <nav>
+    <ul>
+      <li><a href="{{ routes::user::feeds::ADD }}">{{ l.t("add-feed") }}</a></li>
+    </ul>
+  </nav>
 {% endblock content %}
 
 {# vim:set ft=htmldjango: #}

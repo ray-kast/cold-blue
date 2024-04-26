@@ -11,7 +11,7 @@ use poem::{
 
 use crate::{
     db::{
-        creds::{CredentialError, CredentialManager, UserCredentialClaims},
+        credentials::{CredentialError, CredentialManager, UserCredentialClaims},
         user::{Password, User, Username},
         Db,
     },
@@ -40,6 +40,7 @@ impl From<CredentialError> for AuthError {
 }
 
 #[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AuthForm {
     csrf: String,
     username: Username,
@@ -244,6 +245,7 @@ impl SessionManager {
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Claims {
     credential: UserCredentialClaims,
     exp: u64,

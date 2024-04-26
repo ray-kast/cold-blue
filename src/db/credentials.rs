@@ -1,3 +1,5 @@
+use std::ops;
+
 use aes_gcm::{
     aead::{Aead, Payload},
     Aes256Gcm, KeyInit as _,
@@ -14,7 +16,9 @@ use crate::{db::prelude::*, prelude::*};
 
 mod payload;
 
-pub use payload::{AtProtoCredential, AtProtoCredentialForm, CredentialBuilder};
+pub use payload::{
+    AtProtoCredential, CredentialBuilder, CredentialPayload, NamedAtProtoCredential,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum CredentialError {
@@ -68,6 +72,7 @@ impl CredentialManager {
 
 // TODO: test this !!!!
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Argon2Params {
     m_cost: u32,
     t_cost: u32,
@@ -103,6 +108,7 @@ impl TryFrom<Argon2Params> for argon2::Params {
 // TODO: zeroize
 #[serde_with::serde_as]
 #[derive(Debug, AsExpression, deserialize::FromSqlRow, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 #[diesel(sql_type = Text)]
 pub struct CredentialKeyParams {
     #[serde_as(as = "serde_with::DisplayFromStr")]
@@ -188,6 +194,7 @@ unsafe fn derive<'a, const LEN: usize>(
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UserCredentialClaims {
     id: Uuid,
     // TODO: zeroize
@@ -241,7 +248,7 @@ pub struct Credential {
 }
 
 impl Credential {
-    pub async fn create<P: Into<payload::CredentialType>>(
+    pub async fn create<P: Into<payload::CredentialPayload>>(
         db: &mut Connection,
         key: &UserCredentialKey<'_>,
         payload: Named<P>,
@@ -273,10 +280,33 @@ impl Credential {
         Ok(creds)
     }
 
-    pub fn decrypt<P: TryFrom<payload::CredentialType>>(
+    pub async fn from_id(db: &mut Connection, id: &Uuid) -> Result<Option<Self>> {
+        credentials::table
+            .filter(credentials::id.eq(id))
+            .first(db)
+            .await
+            .optional()
+            .context("Error querying credentials by ID")
+    }
+
+    pub async fn from_view_id(db: &mut Connection, id: &str) -> Result<Option<Self>> {
+        use base64::prelude::*;
+
+        let id = BASE64_URL_SAFE_NO_PAD
+            .decode(id)
+            .context("Error decoding base64 credential ID")?;
+        let id = Uuid::from_bytes(
+            id.try_into()
+                .map_err(|_| anyhow!("Invalid base64 credential ID length"))?,
+        );
+
+        Self::from_id(db, &id).await
+    }
+
+    pub fn decrypt<'a, P: TryFrom<payload::CredentialPayload>>(
         &self,
-        key: &UserCredentialKey,
-    ) -> Result<P, CredentialError> {
+        key: &'a UserCredentialKey,
+    ) -> Result<CredentialGuard<'a, P>, CredentialError> {
         let plaintext = key
             .aes()
             .decrypt(
@@ -288,10 +318,11 @@ impl Credential {
             .map_err(|e| CredentialError::Unauthorized)?;
 
         let plaintext = std::str::from_utf8(&plaintext).map_err(|e| CredentialError::Internal)?;
-        ron::from_str::<payload::CredentialType>(plaintext)
+        ron::from_str::<payload::CredentialPayload>(plaintext)
             .map_err(|e| CredentialError::Internal)?
             .try_into()
             .map_err(|e| CredentialError::Internal)
+            .map(|p| CredentialGuard(p, PhantomData))
     }
 
     pub fn to_view(&self) -> CredentialView {
@@ -304,4 +335,19 @@ impl Credential {
             name: self.name.clone().unwrap_or_default(),
         }
     }
+}
+
+#[repr(transparent)]
+pub struct CredentialGuard<'a, T>(T, PhantomData<UserCredentialKey<'a>>);
+
+impl<'a, T> ops::Deref for CredentialGuard<'a, T> {
+    type Target = T;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target { &self.0 }
+}
+
+impl<'a, T> ops::DerefMut for CredentialGuard<'a, T> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
 }

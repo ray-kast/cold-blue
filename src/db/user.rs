@@ -4,7 +4,7 @@ use argon2::{
 };
 use arrayvec::ArrayString;
 
-use super::creds::{
+use super::credentials::{
     Credential, CredentialError, CredentialKeyParams, CredentialManager, CredentialView,
     UserCredentialKey,
 };

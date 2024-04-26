@@ -8,7 +8,7 @@ use diesel_async::{
 
 use crate::prelude::*;
 
-pub mod creds;
+pub mod credentials;
 mod schema;
 pub mod user;
 

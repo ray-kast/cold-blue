@@ -11,7 +11,7 @@ use tokio::{sync::oneshot, task::JoinHandle};
 use super::session::SessionManager;
 use crate::{
     agent::{AgentManager, AgentOpts},
-    db::{creds::CredentialManager, Db, DbOpts},
+    db::{credentials::CredentialManager, Db, DbOpts},
     prelude::*,
 };
 
