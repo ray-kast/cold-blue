@@ -18,24 +18,25 @@ credentials-heading = Accounts
 
 credential-id = Unique ID
 credential-name = Nickname
+credential-login-info = Login info
+credential-username = Username
+credential-password = Password
 
-add-credential-name = Nickname
-add-credential-login-info = Login info
-add-credential-username = Username
-add-credential-password = Password
-add-credential-submit = Add
+credential-atproto-server = Login server
 
+add-credential-submit = Add account
 add-credential-atproto = Add ATProto (Bluesky) account
-add-credential-atproto-server = Login server
 
 add-credential-error-invalid = There was a problem adding the credential, please try again.
 
 feeds-heading = Feeds
 
+feed-name = Feed name
+
 add-feed = Add feed
 add-feed-select-credentials = Select acocunt to log in as
 add-feed-next = Next
-
+add-feed-submit = Add feed
 add-feed-atproto = Add ATProto (Bluesky) feed
 
 add-feed-select-credentials-error-invalid = There was a problem getting your account data, please try again.

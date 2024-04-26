@@ -9,31 +9,21 @@
       <tbody>
         {% call macros::error_2col(error) %}
         <tr>
-          <th><label for="add-atproto-name">{{ l.t("add-feed-name") }}</label></th>
+          <th><label for="add-atproto-name">{{ l.t("feed-name") }}</label></th>
           <td>
             <input id="add-atproto-name" type="text" name="name" placeholder="{{ l.t("optional-placeholder") }}">
           </td>
         </tr>
         <tr>
-          <th colspan="2">{{ l.t("add-feed-login-info") }}</th>
+          <th colspan="2">{{ l.t("credential-login-info") }}</th>
         </tr>
         <tr>
-          <th><label for="add-atproto-server">{{ l.t("add-feed-atproto-server") }}</label></th>
-          <td>
-            <input id="add-atproto-server" type="text" name="server" required value="https://bsky.social/">
-          </td>
+          <th><label for="add-atproto-server">{{ l.t("credential-atproto-server") }}</label></th>
+          <td><span>{{ server }}</span></td>
         </tr>
         <tr>
-          <th><label for="add-atproto-user">{{ l.t("add-feed-username") }}</label></th>
-          <td>
-            <input id="add-atproto-user" type="text" name="username" required>
-          </td>
-        </tr>
-        <tr>
-          <th><label for="add-atproto-pass">{{ l.t("add-feed-password") }}</label></th>
-          <td>
-            <input id="add-atproto-pass" type="password" name="password" required>
-          </td>
+          <th><label for="add-atproto-user">{{ l.t("credential-username") }}</label></th>
+          <td><span>{{ username }}</span></td>
         </tr>
         <tr>
           <td colspan="2"><input type="submit" value="{{ l.t("add-feed-submit") }}"></td>

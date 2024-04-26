@@ -92,16 +92,8 @@ impl FormHandler for AddAtProto {
         .into()
     }
 
-    async fn post(
-        AddAtProtoPost {
-            form,
-            csrf_verify,
-            session,
-            db,
-            agents,
-        }: Self::PostData<'_>,
-    ) -> Result<&'static str, Self::PostError> {
-        create_atproto_cred(form, csrf_verify, session, db, agents)
+    async fn post(data: Self::PostData<'_>) -> Result<&'static str, Self::PostError> {
+        create_atproto_cred(data)
             .await
             .map(|()| routes::user::credentials::INDEX)
             .map_err(|e| ())
@@ -127,11 +119,13 @@ async fn post_add_atproto(
 }
 
 async fn create_atproto_cred(
-    form: poem::Result<Form<AddAtProtoForm>>,
-    csrf_verify: &CsrfVerifier,
-    session: Data<&Session>,
-    db: Data<&Db>,
-    agents: Data<&AgentManager>,
+    AddAtProtoPost {
+        form,
+        csrf_verify,
+        session,
+        db,
+        agents,
+    }: AddAtProtoPost<'_>,
 ) -> Result<()> {
     let Form(AddAtProtoForm { csrf, cred }) = form.map_err(|e| anyhow!("{e}"))?;
 

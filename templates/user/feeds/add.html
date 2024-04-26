@@ -16,7 +16,7 @@
         {% for cred in creds %}
           <tr>
             <td>
-              <input id="cred-{{ cred.id }}" type="radio" name="cred" value="{{ cred.id }}">
+              <input id="cred-{{ cred.id }}" type="radio" name="credentials" value="{{ cred.id }}">
             </td>
             <td>
               <label for="cred-{{ cred.id }}">{{ cred.name +}} (<code>{{ cred.id }}</code>)</label>

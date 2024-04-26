@@ -4,6 +4,7 @@ use poem::{
     http::{header, StatusCode},
     i18n::Locale,
     middleware::{CookieJarManager, Csrf},
+    web::cookie::CookieKey,
     EndpointExt, FromRequest, IntoEndpoint, IntoResponse, Response,
 };
 
@@ -43,12 +44,17 @@ mod prelude {
         get, handler,
         http::StatusCode,
         i18n::Locale,
-        post,
         web::{cookie::CookieJar, CsrfToken, CsrfVerifier, Data, Form, Redirect},
         EndpointExt, IntoEndpoint, IntoResponse, Response, Route,
     };
 
-    pub use super::{super::session::SessionManager, Templated};
+    pub use super::{
+        super::{
+            cookies::{CookieExt, CookieName},
+            session::SessionManager,
+        },
+        TemplateExt, Templated,
+    };
     pub(super) use super::{form_get, form_post, routes, FormHandler, LocaleExt};
     pub use crate::{
         db::{credentials::CredentialManager, Db},
@@ -93,6 +99,15 @@ impl<T> From<T> for Templated<T> {
     #[inline]
     fn from(value: T) -> Self { Self(value) }
 }
+
+pub trait TemplateExt: Template + Send + Sized {
+    #[inline]
+    fn templated(self) -> Templated<Self> { self.into() }
+
+    fn render_response(self) -> Response { self.templated().into_response() }
+}
+
+impl<T: Template + Send + Sized> TemplateExt for T {}
 
 #[macro_export]
 macro_rules! struct_from_request {
@@ -151,7 +166,7 @@ fn form_get<T: FormHandler>(
     T::render(locale, data, None)
 }
 
-// TODO: make this async once they fix the stupid lifetime
+// TODO: make this async once they fix the stupid lifetime bug
 //       https://github.com/rust-lang/rust/issues/100013
 #[inline]
 fn form_post<'a, T: FormHandler>(
@@ -191,8 +206,8 @@ pub fn route() -> impl poem::IntoEndpoint {
         .into_endpoint()
         .catch_error(catch_not_found)
         .data(super::locale::resources())
-        .with(CookieJarManager::new())
         .with(Csrf::new())
+        .with(CookieJarManager::with_key(CookieKey::generate()))
 }
 
 pub async fn catch_not_found(NotFoundError: NotFoundError) -> impl IntoResponse {

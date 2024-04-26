@@ -1,3 +1,5 @@
+use uuid::Uuid;
+
 use crate::{
     agent::AgentManager,
     db::{
@@ -28,6 +30,20 @@ pub struct IndexTemplate {
 #[handler]
 pub fn index(l: Locale) -> Templated<IndexTemplate> { IndexTemplate { l }.into() }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+enum AddFeedState {
+    AtProto {
+        credentials: Uuid,
+        server: Url,
+        username: String,
+    },
+}
+
+impl CookieName for AddFeedState {
+    const COOKIE_NAME: &'static str = "add-feed-state";
+}
+
 struct Add;
 
 #[derive(Template)]
@@ -57,6 +73,7 @@ struct_from_request! {
         form: poem::Result<Form<AddForm>>,
         csrf_verify: &'a CsrfVerifier,
         session: Data<&'a Session>,
+        cookies: &'a CookieJar,
         db: Data<&'a Db>,
     }
 }
@@ -85,22 +102,26 @@ impl FormHandler for Add {
         .into()
     }
 
-    async fn post(
-        AddPost { form, csrf_verify, session, db }: Self::PostData<'_>,
-    ) -> Result<&'static str, Self::PostError> {
-        decrypt_feed_cred(form, csrf_verify, session, db).await.map_err(|e| ())
+    async fn post(data: Self::PostData<'_>) -> Result<&'static str, Self::PostError> {
+        decrypt_feed_cred(data).await.map_err(|e| ())
     }
 
     fn handle_error(error: Self::PostError) -> (StatusCode, &'static str) {
-        (StatusCode::BAD_REQUEST, "add-feed-error-invalid")
+        (
+            StatusCode::BAD_REQUEST,
+            "add-feed-select-credentials-error-invalid",
+        )
     }
 }
 
 async fn decrypt_feed_cred(
-    form: poem::Result<Form<AddForm>>,
-    csrf_verify: &CsrfVerifier,
-    session: Data<&Session>,
-    db: Data<&Db>,
+    AddPost {
+        form,
+        csrf_verify,
+        session,
+        cookies,
+        db,
+    }: AddPost<'_>,
 ) -> Result<&'static str> {
     let Form(AddForm { csrf, credentials }) = form.map_err(|e| anyhow!("{e}"))?;
 
@@ -117,9 +138,21 @@ async fn decrypt_feed_cred(
         .context("Invalid credentials")?;
     let decrypted = cred.decrypt::<CredentialPayload>(&key)?;
 
-    Ok(match *decrypted {
-        CredentialPayload::AtProto(ref a) => routes::user::feeds::ADD_ATPROTO,
-    })
+    let state;
+    let route = match *decrypted {
+        CredentialPayload::AtProto(ref a) => {
+            state = AddFeedState::AtProto {
+                credentials: *cred.id(),
+                server: a.server.clone(),
+                username: a.username.clone(),
+            };
+            routes::user::feeds::ADD_ATPROTO
+        },
+    };
+
+    state.set_private(cookies)?;
+
+    Ok(route)
 }
 
 #[handler]
@@ -138,6 +171,8 @@ struct AddAtProto;
 #[template(path = "user/feeds/add-atproto.html")]
 struct AddAtProtoTemplate {
     l: Locale,
+    server: Url,
+    username: String,
     csrf: String,
     error: Option<String>,
 }
@@ -151,12 +186,14 @@ struct AddAtProtoForm {
 struct_from_request! {
     struct AddAtProtoGet<'a> {
         csrf: &'a CsrfToken,
+        cookies: &'a CookieJar,
     }
 
     struct AddAtProtoPost<'a> {
         form: poem::Result<Form<AddAtProtoForm>>,
         csrf_verify: &'a CsrfVerifier,
         session: Data<&'a Session>,
+        cookies: &'a CookieJar,
         db: Data<&'a Db>,
         agents: Data<&'a AgentManager>,
     }
@@ -166,31 +203,32 @@ impl FormHandler for AddAtProto {
     type PostData<'a> = AddAtProtoPost<'a>;
     type PostError = ();
     type RenderData<'a> = AddAtProtoGet<'a>;
-    type Rendered = Templated<AddAtProtoTemplate>;
+    type Rendered = Response;
 
     async fn render(
         l: Locale,
-        AddAtProtoGet { csrf }: Self::RenderData<'_>,
+        AddAtProtoGet { csrf, cookies }: Self::RenderData<'_>,
         error: Option<String>,
     ) -> Self::Rendered {
+        let Ok(AddFeedState::AtProto {
+            server, username, ..
+        }) = AddFeedState::get_private(cookies)
+        else {
+            return Redirect::see_other(routes::user::feeds::ADD).into_response();
+        };
+
         AddAtProtoTemplate {
             l,
+            server,
+            username,
             csrf: csrf.0.clone(),
             error,
         }
-        .into()
+        .render_response()
     }
 
-    async fn post(
-        AddAtProtoPost {
-            form,
-            csrf_verify,
-            session,
-            db,
-            agents,
-        }: Self::PostData<'_>,
-    ) -> Result<&'static str, Self::PostError> {
-        create_atproto_feed(form, csrf_verify, session, db, agents)
+    async fn post(data: Self::PostData<'_>) -> Result<&'static str, Self::PostError> {
+        create_atproto_feed(data)
             .await
             .map(|()| routes::user::feeds::INDEX)
             .map_err(|e| ())
@@ -199,6 +237,29 @@ impl FormHandler for AddAtProto {
     fn handle_error(error: Self::PostError) -> (StatusCode, &'static str) {
         (StatusCode::BAD_REQUEST, "add-feed-error-invalid")
     }
+}
+
+async fn create_atproto_feed(
+    AddAtProtoPost {
+        form,
+        csrf_verify,
+        session,
+        cookies,
+        db,
+        agents,
+    }: AddAtProtoPost<'_>,
+) -> Result<()> {
+    let Form(AddAtProtoForm { csrf }) = form.map_err(|e| anyhow!("{e}"))?;
+
+    ensure!(csrf_verify.is_valid(&csrf), "Invalid CSRF token");
+
+    let mut db = db.get().await?;
+    let user = User::from_id(&mut db, session.id())
+        .await?
+        .context("Invalid user")?;
+    let key = session.upgrade(&user)?;
+
+    Ok(())
 }
 
 #[handler]
@@ -213,24 +274,4 @@ async fn post_add_atproto(
     post: AddAtProtoPost<'_>,
 ) -> Response {
     form_post::<AddAtProto>(locale, render, post).await
-}
-
-async fn create_atproto_feed(
-    form: poem::Result<Form<AddAtProtoForm>>,
-    csrf_verify: &CsrfVerifier,
-    session: Data<&Session>,
-    db: Data<&Db>,
-    agents: Data<&AgentManager>,
-) -> Result<()> {
-    let Form(AddAtProtoForm { csrf }) = form.map_err(|e| anyhow!("{e}"))?;
-
-    ensure!(csrf_verify.is_valid(&csrf), "Invalid CSRF token");
-
-    let mut db = db.get().await?;
-    let user = User::from_id(&mut db, session.id())
-        .await?
-        .context("Invalid user")?;
-    let key = session.upgrade(&user)?;
-
-    Ok(())
 }

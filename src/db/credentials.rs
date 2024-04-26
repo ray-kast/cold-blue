@@ -17,7 +17,7 @@ use crate::{db::prelude::*, prelude::*};
 mod payload;
 
 pub use payload::{
-    AtProtoCredential, CredentialBuilder, CredentialPayload, NamedAtProtoCredential,
+    CredentialPayload, NamedAtProtoCredential,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -302,6 +302,9 @@ impl Credential {
 
         Self::from_id(db, &id).await
     }
+
+    #[inline]
+    pub fn id(&self) -> &Uuid { &self.id }
 
     pub fn decrypt<'a, P: TryFrom<payload::CredentialPayload>>(
         &self,
