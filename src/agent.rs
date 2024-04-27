@@ -17,7 +17,7 @@ use tokio::{
 
 use crate::{db::user::rng, prelude::*};
 
-#[derive(Debug, clap::Args)]
+#[derive(Debug, Clone, Copy, clap::Args)]
 #[allow(clippy::doc_markdown)]
 pub struct AgentOpts {
     /// Timeout for cleaning up ATProtocol agents

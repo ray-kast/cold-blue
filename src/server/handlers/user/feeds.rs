@@ -91,7 +91,8 @@ impl FormHandler for Add {
     ) -> Self::Rendered {
         let creds = super::credentials::load_creds(session, db)
             .await
-            .unwrap_or_else(|e| Vec::new());
+            .erase_err("Error listing user credentials", ())
+            .unwrap_or_else(|()| Vec::new());
 
         AddTemplate {
             l,
@@ -103,7 +104,9 @@ impl FormHandler for Add {
     }
 
     async fn post(data: Self::PostData<'_>) -> Result<&'static str, Self::PostError> {
-        decrypt_feed_cred(data).await.map_err(|e| ())
+        decrypt_feed_cred(data)
+            .await
+            .erase_err("Error decrypting feed credentials", ())
     }
 
     fn handle_error(error: Self::PostError) -> (StatusCode, &'static str) {
@@ -123,7 +126,7 @@ async fn decrypt_feed_cred(
         db,
     }: AddPost<'_>,
 ) -> Result<&'static str> {
-    let Form(AddForm { csrf, credentials }) = form.map_err(|e| anyhow!("{e}"))?;
+    let Form(AddForm { csrf, credentials }) = form.anyhow_disp("Invalid feed credentials form")?;
 
     ensure!(csrf_verify.is_valid(&csrf), "Invalid CSRF token");
 
@@ -231,7 +234,7 @@ impl FormHandler for AddAtProto {
         create_atproto_feed(data)
             .await
             .map(|()| routes::user::feeds::INDEX)
-            .map_err(|e| ())
+            .erase_err("Error creating ATProto feed", ())
     }
 
     fn handle_error(error: Self::PostError) -> (StatusCode, &'static str) {
@@ -249,7 +252,7 @@ async fn create_atproto_feed(
         agents,
     }: AddAtProtoPost<'_>,
 ) -> Result<()> {
-    let Form(AddAtProtoForm { csrf }) = form.map_err(|e| anyhow!("{e}"))?;
+    let Form(AddAtProtoForm { csrf }) = form.anyhow_disp("Invalid ATProto feed form")?;
 
     ensure!(csrf_verify.is_valid(&csrf), "Invalid CSRF token");
 

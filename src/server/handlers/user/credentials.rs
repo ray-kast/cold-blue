@@ -36,7 +36,10 @@ pub async fn load_creds(session: Data<&Session>, db: Data<&Db>) -> Result<Vec<Cr
 
 #[handler]
 pub async fn index(l: Locale, session: Data<&Session>, db: Data<&Db>) -> Templated<IndexTemplate> {
-    let creds = load_creds(session, db).await.unwrap_or_else(|e| Vec::new());
+    let creds = load_creds(session, db)
+        .await
+        .erase_err("Error listing user credentials", ())
+        .unwrap_or_else(|()| Vec::new());
 
     IndexTemplate { l, creds }.into()
 }
@@ -96,7 +99,7 @@ impl FormHandler for AddAtProto {
         create_atproto_cred(data)
             .await
             .map(|()| routes::user::credentials::INDEX)
-            .map_err(|e| ())
+            .erase_err("Error adding ATProto credential", ())
     }
 
     fn handle_error(error: Self::PostError) -> (StatusCode, &'static str) {
@@ -127,7 +130,8 @@ async fn create_atproto_cred(
         agents,
     }: AddAtProtoPost<'_>,
 ) -> Result<()> {
-    let Form(AddAtProtoForm { csrf, cred }) = form.map_err(|e| anyhow!("{e}"))?;
+    let Form(AddAtProtoForm { csrf, cred }) =
+        form.anyhow_disp("Invalid ATProto credential form")?;
 
     ensure!(csrf_verify.is_valid(&csrf), "Invalid CSRF token");
 
@@ -137,8 +141,8 @@ async fn create_atproto_cred(
         .context("Invalid user")?;
     let key = session.upgrade(&user)?;
 
-    let agent = cred.login(&agents).await.context("Error verifying login")?;
-    let cred = Credential::create(&mut db, &key, cred).await?;
+    let _agent = cred.login(&agents).await.context("Error verifying login")?;
+    let _cred = Credential::create(&mut db, &key, cred).await?;
 
     Ok(())
 }

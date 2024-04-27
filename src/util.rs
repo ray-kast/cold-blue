@@ -1,4 +1,4 @@
-use std::{array::TryFromSliceError, borrow::Borrow};
+use std::{array::TryFromSliceError, borrow::Borrow, fmt};
 
 use aes_gcm::{aead::generic_array::GenericArray, aes::cipher::ArrayLength};
 use typenum::{Const, ToUInt};
@@ -48,8 +48,7 @@ pub trait GenericArrayExt<T, const N: usize> {
     where T: Copy;
 }
 
-impl<T, const N: usize> GenericArrayExt<T, N>
-    for GenericArray<T, typenum::U<N>>
+impl<T, const N: usize> GenericArrayExt<T, N> for GenericArray<T, typenum::U<N>>
 where
     Const<N>: ToUInt,
     typenum::U<N>: ArrayLength<T>,
@@ -57,5 +56,58 @@ where
     fn to_array(&self) -> [T; N]
     where T: Copy {
         self.as_slice().try_into().unwrap()
+    }
+}
+
+pub trait ResultExt: Sized {
+    type Output;
+    type Error;
+
+    fn erase_err_with<F, O: FnOnce() -> F>(self, msg: &str, op: O) -> Result<Self::Output, F>
+    where Self::Error: Into<anyhow::Error>;
+
+    fn erase_err_disp_with<F, O: FnOnce() -> F>(self, msg: &str, op: O) -> Result<Self::Output, F>
+    where Self::Error: fmt::Display;
+
+    fn anyhow_disp(self, msg: &str) -> Result<Self::Output, anyhow::Error>
+    where Self::Error: fmt::Display;
+
+    #[inline]
+    fn erase_err<F>(self, msg: &str, err: F) -> Result<Self::Output, F>
+    where Self::Error: Into<anyhow::Error> {
+        self.erase_err_with(msg, || err)
+    }
+
+    #[inline]
+    fn erase_err_disp<F>(self, msg: &str, err: F) -> Result<Self::Output, F>
+    where Self::Error: fmt::Display {
+        self.erase_err_disp_with(msg, || err)
+    }
+}
+
+impl<T, E> ResultExt for Result<T, E> {
+    type Error = E;
+    type Output = T;
+
+    #[inline]
+    fn anyhow_disp(self, msg: &str) -> Result<Self::Output, anyhow::Error>
+    where Self::Error: fmt::Display {
+        self.map_err(|e| anyhow::anyhow!("{msg}: {e}"))
+    }
+
+    fn erase_err_with<F, O: FnOnce() -> F>(self, msg: &str, op: O) -> Result<Self::Output, F>
+    where Self::Error: Into<anyhow::Error> {
+        self.map_err(|e| {
+            tracing::error!(err = ?e.into(), msg);
+            op()
+        })
+    }
+
+    fn erase_err_disp_with<F, O: FnOnce() -> F>(self, msg: &str, op: O) -> Result<Self::Output, F>
+    where Self::Error: fmt::Display {
+        self.map_err(|err| {
+            tracing::error!(%err, msg);
+            op()
+        })
     }
 }

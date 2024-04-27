@@ -1,13 +1,13 @@
-//! Entry point for `cold-blue`
-
 #![deny(
     clippy::disallowed_methods,
     clippy::suspicious,
     clippy::style,
     clippy::clone_on_ref_ptr
 )]
-#![warn(clippy::pedantic, missing_docs)]
+#![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
+
+#![allow(dead_code)] // TODO: remove when ready
 
 pub(crate) mod agent;
 pub(crate) mod commands;
@@ -45,7 +45,7 @@ pub(crate) mod prelude {
     pub use tracing_subscriber::prelude::*;
     pub use url::Url;
 
-    pub use crate::util::{ArrayExt, SliceExt, GenericArrayExt};
+    pub use crate::util::{ArrayExt, SliceExt, GenericArrayExt, ResultExt};
 
     pub type Result<T = (), E = Error> = std::result::Result<T, E>;
 }

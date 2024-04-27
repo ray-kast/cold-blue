@@ -16,9 +16,7 @@ use crate::{db::prelude::*, prelude::*};
 
 mod payload;
 
-pub use payload::{
-    CredentialPayload, NamedAtProtoCredential,
-};
+pub use payload::{CredentialPayload, NamedAtProtoCredential};
 
 #[derive(Debug, thiserror::Error)]
 pub enum CredentialError {
@@ -186,9 +184,9 @@ unsafe fn derive<'a, const LEN: usize>(
 
     let mut hash = [0_u8; LEN];
     argon2::Argon2::new_with_secret(&mgr.key_secret, algorithm, version, params.clone())
-        .map_err(|_| CredentialError::Internal)?
+        .erase_err_disp("Error constructing argon2", CredentialError::Internal)?
         .hash_password_into(password, salt, &mut hash)
-        .map_err(|_| CredentialError::Internal)?;
+        .erase_err_disp("Error deriving key", CredentialError::Internal)?;
 
     Ok(hash)
 }
@@ -257,11 +255,12 @@ impl Credential {
         rng().fill_bytes(&mut nonce);
 
         let Named { name, payload } = payload;
-        let plaintext = ron::to_string(&payload.into()).map_err(|e| CredentialError::Internal)?;
+        let plaintext = ron::to_string(&payload.into())
+            .erase_err("Error serializing credentials", CredentialError::Internal)?;
         let ciphertext = key
             .aes()
             .encrypt(nonce.as_generic(), key.payload(&plaintext))
-            .map_err(|e| CredentialError::Internal)?;
+            .erase_err_disp("Error encrypting credentials", CredentialError::Internal)?;
 
         let creds = Self {
             id: Uuid::new_v4(),
@@ -275,7 +274,10 @@ impl Credential {
             .insert_into(credentials::table)
             .execute(db)
             .await
-            .map_err(|e| CredentialError::Internal)?;
+            .erase_err(
+                "Error storing credentials in database",
+                CredentialError::Internal,
+            )?;
 
         Ok(creds)
     }
@@ -297,7 +299,7 @@ impl Credential {
             .context("Error decoding base64 credential ID")?;
         let id = Uuid::from_bytes(
             id.try_into()
-                .map_err(|_| anyhow!("Invalid base64 credential ID length"))?,
+                .map_err(|v: Vec<_>| anyhow!("Invalid base64 credential ID length {}", v.len()))?,
         );
 
         Self::from_id(db, &id).await
@@ -309,22 +311,37 @@ impl Credential {
     pub fn decrypt<'a, P: TryFrom<payload::CredentialPayload>>(
         &self,
         key: &'a UserCredentialKey,
-    ) -> Result<CredentialGuard<'a, P>, CredentialError> {
+    ) -> Result<CredentialGuard<'a, P>, CredentialError>
+    where
+        P::Error: Into<anyhow::Error>,
+    {
         let plaintext = key
             .aes()
             .decrypt(
                 self.nonce
                     .try_as_generic::<12>()
-                    .map_err(|e| CredentialError::Internal)?,
+                    .erase_err("Invalid credential nonce length", CredentialError::Internal)?,
                 key.payload(&self.creds),
             )
-            .map_err(|e| CredentialError::Unauthorized)?;
+            .erase_err_disp(
+                "Error decrypting user credentials",
+                CredentialError::Unauthorized,
+            )?;
 
-        let plaintext = std::str::from_utf8(&plaintext).map_err(|e| CredentialError::Internal)?;
+        let plaintext = std::str::from_utf8(&plaintext).erase_err(
+            "UTF-8 error in user credential plaintext",
+            CredentialError::Internal,
+        )?;
         ron::from_str::<payload::CredentialPayload>(plaintext)
-            .map_err(|e| CredentialError::Internal)?
+            .erase_err(
+                "Error parsing user credential plaintext",
+                CredentialError::Internal,
+            )?
             .try_into()
-            .map_err(|e| CredentialError::Internal)
+            .erase_err(
+                "Error unpacking user credential payload",
+                CredentialError::Internal,
+            )
             .map(|p| CredentialGuard(p, PhantomData))
     }
 

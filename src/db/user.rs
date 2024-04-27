@@ -52,10 +52,10 @@ impl User {
             username: username.to_string(),
             password: argon2()
                 .hash_password(password.as_bytes(), &SaltString::generate(&mut rng()))
-                .map_err(|err| {
-                    error!(%err, "Error generating password hash for new user");
-                    VerifyPasswordError
-                })
+                .erase_err_disp(
+                    "Error generating password hash for new user",
+                    VerifyPasswordError,
+                )
                 .context("Error generating password hash")?
                 .to_string(),
             superuser,
@@ -99,9 +99,10 @@ impl User {
         argon2()
             .verify_password(
                 password.as_bytes(),
-                &PasswordHash::new(&self.password).map_err(|_| VerifyPasswordError)?,
+                &PasswordHash::new(&self.password)
+                    .erase_err_disp("Error parsing password hash", VerifyPasswordError)?,
             )
-            .map_err(|_| VerifyPasswordError)
+            .erase_err_disp("Error verifying password", VerifyPasswordError)
     }
 
     pub async fn list_credentials(&self, db: &mut Connection) -> Result<Vec<CredentialView>> {

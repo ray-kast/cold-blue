@@ -4,6 +4,7 @@ mod seed_superuser;
 mod serve;
 
 #[derive(Debug, clap::Subcommand)]
+#[allow(clippy::large_enum_variant)]
 pub enum Command {
     // TODO: migrate command
     SeedSuperuser(seed_superuser::SeedSuperuserCommand),

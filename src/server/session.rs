@@ -112,10 +112,12 @@ impl SessionManager {
         cookie.set_same_site(SameSite::Strict);
 
         if let Some(expires) = expires {
-            cookie.set_max_age((expires - Utc::now()).to_std().unwrap_or_else(|err| {
-                warn!(%err, "Error calculating session cookie max age");
-                Duration::from_secs(3600)
-            }));
+            cookie.set_max_age(
+                (expires - Utc::now())
+                    .to_std()
+                    .erase_err("Error calculating session cookie max age", ())
+                    .unwrap_or_else(|()| Duration::from_secs(3600)),
+            );
             cookie.set_expires(expires);
         }
 
@@ -183,7 +185,7 @@ impl SessionManager {
             username,
             password,
             remember,
-        }) = form.map_err(|_e| AuthError::BadRequest)?;
+        }) = form.erase_err_disp("Invalid auth form body", AuthError::BadRequest)?;
 
         if !csrf_verify.is_valid(&csrf) {
             return Err(AuthError::BadRequest);
@@ -197,17 +199,14 @@ impl SessionManager {
 
         // TODO: replace the log-and-map-error pattern
         let user = User::from_username(
-            &mut *db.get().await.map_err(|err| {
-                error!(%err, "Database error during login");
-                AuthError::InternalError
-            })?,
+            &mut *db
+                .get()
+                .await
+                .erase_err("Database error during login", AuthError::InternalError)?,
             &username,
         )
         .await
-        .map_err(|err| {
-            error!(%err, "Error finding user to log in");
-            AuthError::InternalError
-        })
+        .erase_err("Error finding user to log in", AuthError::InternalError)
         .and_then(|u| u.ok_or(AuthError::Unauthorized))?;
 
         let cred_key = user.derive_credential_key(creds, &password)?;
@@ -227,10 +226,7 @@ impl SessionManager {
             &claims,
             &self.0.encoding_key,
         )
-        .map_err(|err| {
-            warn!(%err, %username, "Error encoding JWT");
-            AuthError::InternalError
-        })?;
+        .erase_err("Error encoding JWT", AuthError::InternalError)?;
 
         self.private_jar(cookies)
             .add(Self::cookie(expires, remember, |c| c.set_value_str(&token)));
