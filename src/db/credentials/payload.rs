@@ -77,14 +77,36 @@ impl CredentialBuilder {
     }
 }
 
+pub trait PayloadKind {
+    const KIND: &'static str;
+
+    fn ref_kind(&self) -> &'static str { Self::KIND }
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub enum CredentialPayload {
     AtProto(AtProtoCredential),
 }
 
+impl PayloadKind for CredentialPayload {
+    const KIND: &'static str = stringify!(PayloadKind);
+
+    fn ref_kind(&self) -> &'static str {
+        match self {
+            Self::AtProto(a) => a.ref_kind(),
+        }
+    }
+}
+
+impl PayloadKind for Infallible {
+    const KIND: &'static str = "!";
+
+    #[inline]
+    fn ref_kind(&self) -> &'static str { match *self {} }
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Named<T> {
     pub name: String,
     #[serde(flatten)]
@@ -108,6 +130,23 @@ macro_rules! credential_type {
         impl From<$ty> for CredentialPayload {
             #[inline]
             fn from(val: $ty) -> Self { Self::$var(val) }
+        }
+
+        impl TryFrom<CredentialPayload> for $ty {
+            type Error = CredentialPayload;
+
+            #[inline]
+            fn try_from(val: CredentialPayload) -> Result<Self, Self::Error> {
+                if let CredentialPayload::$var(val) = val {
+                    Ok(val)
+                } else {
+                    Err(val)
+                }
+            }
+        }
+
+        impl PayloadKind for $ty {
+            const KIND: &'static str = stringify!($var);
         }
 
         $($(credential_type!($($rest)+);)?)?

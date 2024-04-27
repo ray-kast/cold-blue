@@ -98,7 +98,7 @@ impl<T, E> ResultExt for Result<T, E> {
     fn erase_err_with<F, O: FnOnce() -> F>(self, msg: &str, op: O) -> Result<Self::Output, F>
     where Self::Error: Into<anyhow::Error> {
         self.map_err(|e| {
-            tracing::error!(err = ?e.into(), msg);
+            tracing::error!(err = ?e.into(), "{msg}");
             op()
         })
     }
@@ -106,7 +106,7 @@ impl<T, E> ResultExt for Result<T, E> {
     fn erase_err_disp_with<F, O: FnOnce() -> F>(self, msg: &str, op: O) -> Result<Self::Output, F>
     where Self::Error: fmt::Display {
         self.map_err(|err| {
-            tracing::error!(%err, msg);
+            tracing::error!(%err, "{msg}");
             op()
         })
     }

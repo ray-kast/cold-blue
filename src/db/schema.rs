@@ -4,7 +4,7 @@ diesel::table! {
     credentials (id) {
         id -> Uuid,
         #[max_length = 256]
-        name -> Nullable<Varchar>,
+        name -> Varchar,
         owner -> Uuid,
         nonce -> Bytea,
         creds -> Bytea,

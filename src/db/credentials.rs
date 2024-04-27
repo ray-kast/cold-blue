@@ -10,18 +10,20 @@ use diesel::{
 };
 use rand::RngCore;
 
-use self::payload::Named;
+use self::payload::{Named, PayloadKind};
 use super::user::{rng, Password, User, VerifyPasswordError};
 use crate::{db::prelude::*, prelude::*};
 
 mod payload;
 
-pub use payload::{CredentialPayload, NamedAtProtoCredential};
+pub use payload::{AtProtoCredential, CredentialPayload, NamedAtProtoCredential};
 
 #[derive(Debug, thiserror::Error)]
 pub enum CredentialError {
     #[error("Internal error processing credentials")]
     Internal,
+    #[error("Invalid credential name provided")]
+    InvalidName,
     #[error("Unauthorized credentials operation")]
     Unauthorized,
 }
@@ -239,7 +241,7 @@ pub struct CredentialView {
 #[diesel(check_for_backend(Pg))]
 pub struct Credential {
     id: Uuid,
-    name: Option<String>,
+    name: String,
     owner: Uuid,
     nonce: Vec<u8>,
     creds: Vec<u8>,
@@ -264,7 +266,9 @@ impl Credential {
 
         let creds = Self {
             id: Uuid::new_v4(),
-            name: (!name.trim().is_empty()).then_some(name),
+            name: (!name.trim().is_empty())
+                .then_some(name)
+                .ok_or(CredentialError::InvalidName)?,
             owner: *key.0.id(),
             nonce: nonce.to_vec(),
             creds: ciphertext,
@@ -308,12 +312,12 @@ impl Credential {
     #[inline]
     pub fn id(&self) -> &Uuid { &self.id }
 
-    pub fn decrypt<'a, P: TryFrom<payload::CredentialPayload>>(
+    pub fn decrypt<'a, P: TryFrom<payload::CredentialPayload> + PayloadKind>(
         &self,
         key: &'a UserCredentialKey,
     ) -> Result<CredentialGuard<'a, P>, CredentialError>
     where
-        P::Error: Into<anyhow::Error>,
+        P::Error: PayloadKind,
     {
         let plaintext = key
             .aes()
@@ -338,10 +342,14 @@ impl Credential {
                 CredentialError::Internal,
             )?
             .try_into()
-            .erase_err(
-                "Error unpacking user credential payload",
-                CredentialError::Internal,
-            )
+            .map_err(|p: P::Error| {
+                error!(
+                    expected = P::KIND,
+                    actual = p.ref_kind(),
+                    "Invalid credential payload kind"
+                );
+                CredentialError::Internal
+            })
             .map(|p| CredentialGuard(p, PhantomData))
     }
 
@@ -352,7 +360,7 @@ impl Credential {
 
         CredentialView {
             id,
-            name: self.name.clone().unwrap_or_default(),
+            name: self.name.clone(),
         }
     }
 }

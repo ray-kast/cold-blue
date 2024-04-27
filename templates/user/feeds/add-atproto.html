@@ -3,34 +3,54 @@
 
 {% block heading %}{{ l.t("add-feed-atproto") }}{% endblock heading %}
 {% block content %}
-  <form data-secure-ctx action="{{ routes::user::feeds::ADD_ATPROTO }}" method="post">
+  <form id="atproto-home" data-secure-ctx action="{{ routes::user::feeds::ADD_ATPROTO }}" method="post">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <table>
-      <tbody>
-        {% call macros::error_2col(error) %}
-        <tr>
-          <th><label for="add-atproto-name">{{ l.t("feed-name") }}</label></th>
-          <td>
-            <input id="add-atproto-name" type="text" name="name" placeholder="{{ l.t("optional-placeholder") }}">
-          </td>
-        </tr>
-        <tr>
-          <th colspan="2">{{ l.t("credential-login-info") }}</th>
-        </tr>
-        <tr>
-          <th><label for="add-atproto-server">{{ l.t("credential-atproto-server") }}</label></th>
-          <td><span>{{ server }}</span></td>
-        </tr>
-        <tr>
-          <th><label for="add-atproto-user">{{ l.t("credential-username") }}</label></th>
-          <td><span>{{ username }}</span></td>
-        </tr>
-        <tr>
-          <td colspan="2"><input type="submit" value="{{ l.t("add-feed-submit") }}"></td>
-        </tr>
-      </tbody>
-    </table>
+    <input type="hidden" name="type" value="home">
   </form>
+  <form id="atproto-gen" data-secure-ctx action="{{ routes::user::feeds::ADD_ATPROTO }}" method="post">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="type" value="gen">
+  </form>
+  <table>
+    <tbody>
+      {% call macros::error_2col(error) %}
+      <tr>
+        <th><label for="name">{{ l.t("feed-name") }}</label></th>
+        <td>
+          <input id="atproto-name" type="text" name="name" required autofocus>
+        </td>
+      </tr>
+      <tr>
+        <th colspan="2">{{ l.t("credential-login-info") }}</th>
+      </tr>
+      <tr>
+        <th><label for="atproto-server">{{ l.t("credential-atproto-server") }}</label></th>
+        <td><span>{{ server }}</span></td>
+      </tr>
+      <tr>
+        <th><label for="atproto-user">{{ l.t("credential-username") }}</label></th>
+        <td><span>{{ username }}</span></td>
+      </tr>
+      <tr>
+        <th colspan="2">{{ l.t("feed-atproto-home") }}</th>
+      </tr>
+      <tr>
+        <th><label for="atproto-algorithm">{{ l.t("feed-atproto-algorithm") }}</label></th>
+        <td>
+          <input id="atproto-algorithm" form="atproto-home" type="text" name="name" placeholder="{{ l.t("advanced-placeholder") }}">
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2"><input form="atproto-home" type="submit" value="{{ l.t("add-feed-atproto-submit-home") }}"></td>
+      </tr>
+      <tr>
+        <th colspan="2">{{ l.t("feed-atproto-gen") }}</th>
+      </tr>
+      <tr>
+        <td colspan="2"><input form="atproto-gen" type="submit" value="{{ l.t("add-feed-atproto-submit-gen") }}"></td>
+      </tr>
+    </tbody>
+  </table>
 {% endblock content %}
 
 {# vim:set ft=htmldjango: #}

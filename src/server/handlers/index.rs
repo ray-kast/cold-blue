@@ -79,7 +79,7 @@ impl FormHandler for Login {
     fn handle_error(err: Self::PostError) -> (StatusCode, &'static str) {
         match err {
             AuthError::BadRequest => (StatusCode::BAD_REQUEST, "login-error-invalid"),
-            AuthError::InternalError => (StatusCode::INTERNAL_SERVER_ERROR, "login-error-internal"),
+            AuthError::InternalError => (StatusCode::INTERNAL_SERVER_ERROR, "error-internal"),
             AuthError::Unauthorized => (StatusCode::UNAUTHORIZED, "login-error-unauthorized"),
             AuthError::AlreadyLoggedIn => (StatusCode::BAD_REQUEST, "login-error-logged-in"),
         }

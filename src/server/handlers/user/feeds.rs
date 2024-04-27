@@ -1,9 +1,9 @@
 use uuid::Uuid;
 
 use crate::{
-    agent::AgentManager,
+    agent::{AgentManager, Feed, FeedGen, HomeFeed},
     db::{
-        credentials::{Credential, CredentialPayload, CredentialView},
+        credentials::{AtProtoCredential, Credential, CredentialPayload, CredentialView},
         user::User,
     },
     server::{handlers::prelude::*, session::Session},
@@ -112,7 +112,7 @@ impl FormHandler for Add {
     fn handle_error(error: Self::PostError) -> (StatusCode, &'static str) {
         (
             StatusCode::BAD_REQUEST,
-            "add-feed-select-credentials-error-invalid",
+            "add-feed-error-invalid-credentials",
         )
     }
 }
@@ -181,9 +181,27 @@ struct AddAtProtoTemplate {
 }
 
 #[derive(serde::Deserialize)]
-#[serde(deny_unknown_fields)]
 struct AddAtProtoForm {
     csrf: String,
+    name: String,
+    #[serde(flatten)]
+    ty: AddAtProtoType,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields, tag = "type", rename_all = "snake_case")]
+enum AddAtProtoType {
+    Home { algorithm: Option<String> },
+    Gen { feed: String },
+}
+
+impl From<AddAtProtoType> for Feed {
+    fn from(value: AddAtProtoType) -> Self {
+        match value {
+            AddAtProtoType::Home { algorithm } => Self::Home(HomeFeed { algorithm }),
+            AddAtProtoType::Gen { feed } => Self::Gen(FeedGen { feed }),
+        }
+    }
 }
 
 struct_from_request! {
@@ -238,7 +256,7 @@ impl FormHandler for AddAtProto {
     }
 
     fn handle_error(error: Self::PostError) -> (StatusCode, &'static str) {
-        (StatusCode::BAD_REQUEST, "add-feed-error-invalid")
+        (StatusCode::BAD_REQUEST, "error-internal")
     }
 }
 
@@ -252,7 +270,14 @@ async fn create_atproto_feed(
         agents,
     }: AddAtProtoPost<'_>,
 ) -> Result<()> {
-    let Form(AddAtProtoForm { csrf }) = form.anyhow_disp("Invalid ATProto feed form")?;
+    let Form(AddAtProtoForm { csrf, name, ty }) = form.anyhow_disp("Invalid ATProto feed form")?;
+
+    let Ok(AddFeedState::AtProto {
+        credentials, ..
+    }) = AddFeedState::get_private(cookies)
+    else {
+        todo!()
+    };
 
     ensure!(csrf_verify.is_valid(&csrf), "Invalid CSRF token");
 
@@ -261,6 +286,13 @@ async fn create_atproto_feed(
         .await?
         .context("Invalid user")?;
     let key = session.upgrade(&user)?;
+
+    let cred = Credential::from_id(&mut db, &credentials).await?.context("Invalid credentials")?;
+    let decrypted = cred.decrypt::<AtProtoCredential>(&key)?;
+
+    let agent = decrypted.login(&agents).await.context("Error logging in")?;
+
+    let () = agent.get_feed(&ty.into()).await.context("Error loading feed")?;
 
     Ok(())
 }

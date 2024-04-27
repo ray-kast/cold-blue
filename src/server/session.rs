@@ -33,7 +33,7 @@ pub enum AuthError {
 impl From<CredentialError> for AuthError {
     fn from(value: CredentialError) -> Self {
         match value {
-            CredentialError::Internal => AuthError::InternalError,
+            CredentialError::Internal | CredentialError::InvalidName => AuthError::InternalError,
             CredentialError::Unauthorized => AuthError::Unauthorized,
         }
     }
