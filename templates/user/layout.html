@@ -1,4 +1,5 @@
 {% extends "../base.html" %}
+{% import "macros.html" as macros %}
 
 {% block body %}
   <header id="user-header">
@@ -6,6 +7,7 @@
       <ul>
         <li><a href="{{ routes::user::credentials::INDEX }}">{{ l.t("credentials-heading") }}</a></li>
         <li><a href="{{ routes::user::feeds::INDEX }}">{{ l.t("feeds-heading") }}</a></li>
+        <li>{% call macros::logout_button() %}</li>
       </ul>
     </nav>
     <h1>{% block heading %}{% endblock heading %}

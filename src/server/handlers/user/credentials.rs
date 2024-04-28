@@ -101,8 +101,8 @@ impl FormHandler for AddAtProto {
             .erase_err("Error adding ATProto credential", ())
     }
 
-    fn handle_error(error: Self::PostError) -> (StatusCode, &'static str) {
-        (StatusCode::BAD_REQUEST, "add-credential-error-invalid")
+    fn handle_error(error: Self::PostError) -> FormError {
+        FormError::Rerender(StatusCode::BAD_REQUEST, "add-credential-error-invalid")
     }
 }
 

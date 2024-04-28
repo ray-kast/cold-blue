@@ -19,11 +19,12 @@ clap = { version = "4.5.4", features = ["env", "cargo", "derive", "wrap_help"] }
 const_format = "0.2.32"
 dashmap = "5.5.3"
 deadpool = { version = "0.9.5", features = ["rt_tokio_1"] }
-derive_more = "0.99.17"
 diesel = { version = "2.1.5", features = ["postgres", "uuid"] }
 diesel-async = { version = "0.4.1", features = ["deadpool", "postgres"] }
 dispose = "0.5.0"
 dotenvy = "0.15.7"
+ed25519-dalek = { version = "2.1.1", features = ["pem", "alloc"] }
+either = "1.11.0"
 futures-util = "0.3.30"
 hmac = "0.12.1"
 hostname = "0.4.0"
@@ -35,7 +36,6 @@ rand = { version = "0.8.5", features = ["log"] }
 ron = "0.8.1"
 rpassword = "7.3.1"
 rss = { version = "2.0.7", features = ["atom"] }
-rustls-pemfile = "2.1.2"
 serde = { version = "1.0.197", features = ["derive"] }
 serde_with = { version = "3.7.0", features = ["base64"] }
 sha2 = "0.10.8"

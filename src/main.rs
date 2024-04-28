@@ -6,15 +6,14 @@
 )]
 #![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
-
 #![allow(dead_code)] // TODO: remove when ready
 
 pub(crate) mod agent;
+mod boot;
 pub(crate) mod commands;
 pub(crate) mod db;
 pub(crate) mod server;
 pub(crate) mod util;
-mod boot;
 
 pub(crate) mod prelude {
     #![allow(unused_imports)]
@@ -45,10 +44,9 @@ pub(crate) mod prelude {
     pub use tracing_subscriber::prelude::*;
     pub use url::Url;
 
-    pub use crate::util::{ArrayExt, SliceExt, GenericArrayExt, ResultExt};
+    pub use crate::util::{ArrayExt, GenericArrayExt, ResultExt, SliceExt, TryIntoArray};
 
     pub type Result<T = (), E = Error> = std::result::Result<T, E>;
 }
-
 
 fn main() { boot::main() }

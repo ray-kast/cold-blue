@@ -44,14 +44,7 @@ impl CredentialManager {
             BASE64_STANDARD
                 .decode(key_secret)
                 .context("Error decoding base64 credential key secret")?
-                .try_into()
-                .map_err(|v: Vec<_>| {
-                    anyhow!(
-                        "Invalid length {} for credential key secret, expected {}",
-                        v.len(),
-                        argon2::RECOMMENDED_SALT_LEN
-                    )
-                })?
+                .try_into_array("credential key secret")?
         };
 
         Ok(Self(CredentialManagerInternal { key_secret }.into()))

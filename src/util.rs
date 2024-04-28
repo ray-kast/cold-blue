@@ -111,3 +111,18 @@ impl<T, E> ResultExt for Result<T, E> {
         })
     }
 }
+
+pub trait TryIntoArray<T, const N: usize> {
+    fn try_into_array(self, msg: &'static str) -> Result<[T; N], anyhow::Error>;
+}
+
+impl<S: AsRef<[T]> + TryInto<[T; N], Error = S>, T, const N: usize> TryIntoArray<T, N> for S {
+    fn try_into_array(self, msg: &'static str) -> Result<[T; N], anyhow::Error> {
+        self.try_into().map_err(|s| {
+            anyhow::anyhow!(
+                "Invalid length {} for {msg}, expected {N}",
+                s.as_ref().len()
+            )
+        })
+    }
+}

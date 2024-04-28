@@ -10,6 +10,7 @@ pub fn route() -> impl IntoEndpoint {
     Route::new()
         .at(routes::INDEX, get(index))
         .at(routes::LOGIN, get(get_login).post(post_login))
+        .at(routes::LOGOUT, post(post_logout))
         .nest_no_strip(routes::user::INDEX, user::route())
 }
 
@@ -76,12 +77,12 @@ impl FormHandler for Login {
             .map(|_| routes::user::INDEX)
     }
 
-    fn handle_error(err: Self::PostError) -> (StatusCode, &'static str) {
+    fn handle_error(err: Self::PostError) -> FormError {
         match err {
-            AuthError::BadRequest => (StatusCode::BAD_REQUEST, "login-error-invalid"),
-            AuthError::InternalError => (StatusCode::INTERNAL_SERVER_ERROR, "error-internal"),
-            AuthError::Unauthorized => (StatusCode::UNAUTHORIZED, "login-error-unauthorized"),
-            AuthError::AlreadyLoggedIn => (StatusCode::BAD_REQUEST, "login-error-logged-in"),
+            AuthError::BadRequest => FormError::Rerender(StatusCode::BAD_REQUEST, "login-error-invalid"),
+            AuthError::InternalError => FormError::Rerender(StatusCode::INTERNAL_SERVER_ERROR, "error-internal"),
+            AuthError::Unauthorized => FormError::Rerender(StatusCode::UNAUTHORIZED, "login-error-unauthorized"),
+            AuthError::AlreadyLoggedIn => FormError::SeeOther(routes::user::INDEX),
         }
     }
 }
@@ -101,10 +102,12 @@ pub async fn get_login(
 }
 
 #[handler]
-pub async fn post_login(
-    locale: Locale,
-    render: LoginGet<'_>,
-    post: LoginPost<'_>,
-) -> Response {
+pub async fn post_login(locale: Locale, render: LoginGet<'_>, post: LoginPost<'_>) -> Response {
     form_post::<Login>(locale, render, post).await
+}
+
+#[handler]
+pub fn post_logout(cookies: &CookieJar) -> impl IntoResponse {
+    SessionManager::remove(cookies);
+    Redirect::see_other(routes::INDEX)
 }

@@ -109,8 +109,8 @@ impl FormHandler for Add {
             .erase_err("Error decrypting feed credentials", ())
     }
 
-    fn handle_error(error: Self::PostError) -> (StatusCode, &'static str) {
-        (
+    fn handle_error(error: Self::PostError) -> FormError {
+        FormError::Rerender(
             StatusCode::BAD_REQUEST,
             "add-feed-error-invalid-credentials",
         )
@@ -255,8 +255,8 @@ impl FormHandler for AddAtProto {
             .erase_err("Error creating ATProto feed", ())
     }
 
-    fn handle_error(error: Self::PostError) -> (StatusCode, &'static str) {
-        (StatusCode::BAD_REQUEST, "error-internal")
+    fn handle_error(error: Self::PostError) -> FormError {
+        FormError::Rerender(StatusCode::BAD_REQUEST, "error-internal")
     }
 }
 

@@ -1,4 +1,7 @@
+use std::future;
+
 use askama::Template;
+use either::Either;
 use poem::{
     error::NotFoundError,
     http::{header, StatusCode},
@@ -16,6 +19,7 @@ mod user;
 mod routes {
     pub const INDEX: &str = "/";
     pub const LOGIN: &str = "/login";
+    pub const LOGOUT: &str = "/logout";
 
     pub mod user {
         pub const INDEX: &str = "/user";
@@ -44,6 +48,7 @@ mod prelude {
         get, handler,
         http::StatusCode,
         i18n::Locale,
+        post,
         web::{cookie::CookieJar, CsrfToken, CsrfVerifier, Data, Form, Redirect},
         EndpointExt, IntoEndpoint, IntoResponse, Response, Route,
     };
@@ -55,7 +60,7 @@ mod prelude {
         },
         TemplateExt, Templated,
     };
-    pub(super) use super::{form_get, form_post, routes, FormHandler, LocaleExt};
+    pub(super) use super::{form_get, form_post, routes, FormError, FormHandler, LocaleExt};
     pub use crate::{
         db::{credentials::CredentialManager, Db},
         prelude::*,
@@ -137,6 +142,12 @@ macro_rules! struct_from_request {
     };
 }
 
+enum FormError {
+    /// Rerender the current page with an error message
+    Rerender(StatusCode, &'static str),
+    SeeOther(&'static str),
+}
+
 trait FormHandler: Send + 'static {
     type RenderData<'a>: FromRequest<'a> + Send;
     type Rendered: IntoResponse;
@@ -155,7 +166,7 @@ trait FormHandler: Send + 'static {
         data: Self::PostData<'_>,
     ) -> impl Future<Output = Result<&'static str, Self::PostError>> + Send + '_;
 
-    fn handle_error(error: Self::PostError) -> (StatusCode, &'static str);
+    fn handle_error(error: Self::PostError) -> FormError;
 }
 
 #[inline]
@@ -176,11 +187,15 @@ fn form_post<'a, T: FormHandler>(
 ) -> impl Future<Output = Response> + Send + 'a {
     T::post(data)
         .map_ok(|r| poem::web::Redirect::see_other(r).into_response())
-        .or_else(|e| {
-            let (status, msg) = T::handle_error(e);
-            let msg = locale.t(msg);
-            T::render(locale, render, Some(msg))
-                .map(move |r| Ok(r.with_status(status).into_response()))
+        .or_else(|e| match T::handle_error(e) {
+            FormError::Rerender(s, m) => Either::Left({
+                let m = locale.t(m);
+                T::render(locale, render, Some(m))
+                    .map(move |r| Ok(r.with_status(s).into_response()))
+            }),
+            FormError::SeeOther(r) => Either::Right(future::ready(Ok(
+                poem::web::Redirect::see_other(r).into_response(),
+            ))),
         })
         .unwrap_or_else(|e: Infallible| match e {})
 

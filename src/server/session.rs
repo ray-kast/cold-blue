@@ -1,5 +1,6 @@
-use std::{ops::Deref, path::Path, time::Duration};
+use std::{ops::Deref, time::Duration};
 
+use ed25519_dalek::ed25519;
 use jsonwebtoken as jwt;
 use poem::{
     web::{
@@ -39,14 +40,16 @@ impl From<CredentialError> for AuthError {
     }
 }
 
-#[derive(serde::Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct AuthForm {
-    csrf: String,
-    username: Username,
-    password: Password,
-    #[serde(default)]
-    remember: String,
+#[derive(Debug, clap::Args)]
+#[allow(clippy::doc_markdown)]
+pub struct SessionManagerOpts {
+    /// base64-encoded Ed25519 keypair for JWT signing
+    #[arg(long, env)]
+    session_signer: String,
+
+    /// base64-encoded encryption key for JWT encryption
+    #[arg(long, env)]
+    session_key: String,
 }
 
 #[derive(Clone)]
@@ -65,29 +68,55 @@ impl SessionManager {
     const COOKIE_NAME: &'static str = "session";
 
     // TODO: zeroize
-    pub fn new<P: AsRef<Path>>(enc_key_file: P, dec_key_file: P, cookie_key: &str) -> Result<Self> {
-        let encoding_key = {
-            let key_file = enc_key_file.as_ref();
-            let bytes = std::fs::read(key_file)
-                .with_context(|| format!("Error reading key file {key_file:?}"))?;
+    pub fn new(opts: SessionManagerOpts) -> Result<Self> {
+        let SessionManagerOpts {
+            session_signer,
+            session_key,
+        } = opts;
 
-            jwt::EncodingKey::from_ed_pem(&bytes).context("Error deriving JWT encoding key")?
+        let signer = {
+            use base64::prelude::*;
+
+            let bytes = BASE64_STANDARD
+                .decode(session_signer)
+                .context("Error decoding base64 session signing key")?
+                .try_into_array("Ed25519 keypair")?;
+
+            ed25519::KeypairBytes::from(ed25519_dalek::SigningKey::from_bytes(&bytes))
+        };
+
+        let encoding_key = {
+            use ed25519::pkcs8::{spki::der::pem::LineEnding, EncodePrivateKey};
+
+            jwt::EncodingKey::from_ed_pem(
+                signer
+                    .to_pkcs8_pem(LineEnding::CR)
+                    .context("Error encoding PEM session signing key")?
+                    .as_bytes(),
+            )
+            .context("Error reparsing PEM session signing key")?
         };
 
         let decoding_key = {
-            let key_file = dec_key_file.as_ref();
-            let bytes = std::fs::read(key_file)
-                .with_context(|| format!("Error reading key file {key_file:?}"))?;
+            use ed25519::pkcs8::{spki::der::pem::LineEnding, EncodePublicKey};
 
-            jwt::DecodingKey::from_ed_pem(&bytes).context("Error deriving JWT decoding key")?
+            jwt::DecodingKey::from_ed_pem(
+                signer
+                    .public_key
+                    .unwrap_or_else(|| unreachable!())
+                    .to_public_key_pem(LineEnding::CR)
+                    .context("Error encoding PEM session signing key")?
+                    .as_bytes(),
+            )
+            .context("Error reparsing PEM session signing key")?
         };
 
         let cookie_key = {
             use base64::prelude::*;
 
             let bytes = BASE64_STANDARD
-                .decode(cookie_key)
-                .context("Error decoding base64 session cookie key")?;
+                .decode(session_key)
+                .context("Error decoding base64 session encryption key")?;
 
             CookieKey::try_from(&*bytes).context("Error deriving session cookie key")?
         };
@@ -129,6 +158,9 @@ impl SessionManager {
     fn private_jar<'a>(&'a self, cookies: &'a CookieJar) -> PrivateCookieJar {
         cookies.private_with_key(&self.0.cookie_key)
     }
+
+    #[inline]
+    pub fn remove(cookies: &CookieJar) { cookies.remove(Self::COOKIE_NAME) }
 
     pub fn get(&self, cookies: &CookieJar) -> Option<Session> {
         let cookie = self.private_jar(cookies).get(Self::COOKIE_NAME)?;
@@ -238,6 +270,16 @@ impl SessionManager {
             .into(),
         ))
     }
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AuthForm {
+    csrf: String,
+    username: Username,
+    password: Password,
+    #[serde(default)]
+    remember: String,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]

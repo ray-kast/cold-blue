@@ -20,6 +20,7 @@
 ** ( ) make my usages of `creds` and `credentials` consistent
 *** ( ) maybe just replace `credentials` with `logins`
 ** ( ) maximize my utilization of derive_more to reduce boilerplate
+** ( ) make my usages of `-title` and `-heading` consistent
 
 * Flows
 ** Login
@@ -42,7 +43,8 @@
 ** (=) Account registration *(blocked on admin create user)*
 *** (=) hide if disabled
 ** Account management
-*** ( ) logout
+*** (-) logout
+**** (x) delete session token
 **** ( ) invalidate session token server-side on logout
 *** ( ) log out all sessions
 *** ( ) change username

@@ -16,6 +16,8 @@ login-submit = Log in
 login-error-invalid = There was a problem logging in, please try again.
 login-error-unauthorized = Invalid username or password.
 
+logout-submit = Log out
+
 credentials-heading = Accounts
 
 credential-id = Unique ID

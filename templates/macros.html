@@ -1,3 +1,9 @@
+{% macro logout_button() %}
+  <form action="{{ routes::LOGOUT }}" method="post">
+    <input type="submit" value="{{ l.t("logout-submit") }}">
+  </form>
+{% endmacro logout_button %}
+
 {% macro error_2col(error) %}
   {% match error %}
   {% when Some with (err) %}
