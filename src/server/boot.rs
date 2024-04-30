@@ -1,4 +1,4 @@
-use std::{path::PathBuf, time::Duration};
+use std::time::Duration;
 
 use listenfd::ListenFd;
 use poem::{
@@ -60,8 +60,7 @@ pub async fn run(opts: ServerOpts) -> Result<ServerHandle> {
 
     let creds = CredentialManager::new(&credential_secret)
         .context("Error initializing credential manager")?;
-    let sessions = SessionManager::new(session)
-        .context("Error initializing session manager")?;
+    let sessions = SessionManager::new(session).context("Error initializing session manager")?;
     let db = Db::new(db).context("Error initializing database")?;
     let agents = AgentManager::new(agent);
 

@@ -9,7 +9,7 @@ pub fn route() -> impl IntoEndpoint {
     //       docs indicate their behavior should be.  whyyyy,,
     Route::new()
         .at(routes::INDEX, get(index))
-        .at(routes::LOGIN, get(get_login).post(post_login))
+        .at(routes::LOGIN, form(Login))
         .at(routes::LOGOUT, post(post_logout))
         .nest_no_strip(routes::user::INDEX, user::route())
 }
@@ -30,12 +30,13 @@ pub struct LoginTemplate {
 struct_from_request! {
     struct LoginGet<'a> {
         csrf: &'a CsrfToken,
+        cookies: &'a CookieJar,
+        sessions: Data<&'a SessionManager>,
     }
 
     struct LoginPost<'a> {
         form: poem::Result<Form<AuthForm>>,
         cookies: &'a CookieJar,
-        csrf_verify: &'a CsrfVerifier,
         sessions: Data<&'a SessionManager>,
         creds: Data<&'a CredentialManager>,
         db: Data<&'a Db>,
@@ -46,64 +47,59 @@ impl FormHandler for Login {
     type PostData<'a> = LoginPost<'a>;
     type PostError = AuthError;
     type RenderData<'a> = LoginGet<'a>;
-    type Rendered = Templated<LoginTemplate>;
+    type Rendered = Response;
 
     async fn render(
         l: Locale,
-        LoginGet { csrf }: Self::RenderData<'_>,
+        LoginGet {
+            csrf,
+            cookies,
+            sessions,
+        }: Self::RenderData<'_>,
         error: Option<String>,
     ) -> Self::Rendered {
+        if sessions.get(cookies).is_some() {
+            return Redirect::see_other(routes::user::INDEX).into_response();
+        }
+
         LoginTemplate {
             l,
             csrf: csrf.0.clone(),
             error,
         }
-        .into()
+        .render_response()
     }
 
-    async fn post(
+    async fn post<'a>(
+        csrf: &'a CsrfVerifier,
         LoginPost {
             form,
             cookies,
-            csrf_verify,
             sessions,
             creds,
             db,
-        }: Self::PostData<'_>,
+        }: Self::PostData<'a>,
     ) -> Result<&'static str, Self::PostError> {
         sessions
-            .auth(form, csrf_verify, cookies, &creds, &db)
+            .auth(form, csrf, cookies, &creds, &db)
             .await
             .map(|_| routes::user::INDEX)
     }
 
     fn handle_error(err: Self::PostError) -> FormError {
         match err {
-            AuthError::BadRequest => FormError::Rerender(StatusCode::BAD_REQUEST, "login-error-invalid"),
-            AuthError::InternalError => FormError::Rerender(StatusCode::INTERNAL_SERVER_ERROR, "error-internal"),
-            AuthError::Unauthorized => FormError::Rerender(StatusCode::UNAUTHORIZED, "login-error-unauthorized"),
+            AuthError::BadRequest => {
+                FormError::Rerender(StatusCode::BAD_REQUEST, "login-error-invalid")
+            },
+            AuthError::InternalError => {
+                FormError::Rerender(StatusCode::INTERNAL_SERVER_ERROR, "error-internal")
+            },
+            AuthError::Unauthorized => {
+                FormError::Rerender(StatusCode::UNAUTHORIZED, "login-error-unauthorized")
+            },
             AuthError::AlreadyLoggedIn => FormError::SeeOther(routes::user::INDEX),
         }
     }
-}
-
-#[handler]
-pub async fn get_login(
-    locale: Locale,
-    data: LoginGet<'_>,
-    sessions: Data<&SessionManager>,
-    cookies: &CookieJar,
-) -> Response {
-    if sessions.get(cookies).is_some() {
-        Redirect::see_other(routes::user::INDEX).into_response()
-    } else {
-        form_get::<Login>(locale, data).await.into_response()
-    }
-}
-
-#[handler]
-pub async fn post_login(locale: Locale, render: LoginGet<'_>, post: LoginPost<'_>) -> Response {
-    form_post::<Login>(locale, render, post).await
 }
 
 #[handler]

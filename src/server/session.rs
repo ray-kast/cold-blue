@@ -74,6 +74,11 @@ impl SessionManager {
             session_key,
         } = opts;
 
+        // NOTE: theoretically i could skip generating and re-parsing pem files
+        //       but i don't have a clue what the jwt crate is doing to make
+        //       signatures not verify like that and i don't really care to
+        //       find out
+
         let signer = {
             use base64::prelude::*;
 
@@ -335,7 +340,7 @@ impl<E: Endpoint, U: Endpoint> Endpoint for SessionEndpoint<E, U> {
         match req
             .extensions()
             .get::<SessionManager>()
-            .expect("")
+            .expect("SessionMiddleware requires SessionManager data")
             .get(req.cookie())
         {
             Some(s) => {

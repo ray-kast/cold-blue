@@ -10,10 +10,9 @@ use crate::{
 pub fn route() -> impl IntoEndpoint {
     use routes::user::credentials as routes;
 
-    Route::new().at(routes::INDEX, get(index)).at(
-        routes::ADD_ATPROTO,
-        get(get_add_atproto).post(post_add_atproto),
-    )
+    Route::new()
+        .at(routes::INDEX, get(index))
+        .at(routes::ADD_ATPROTO, form(AddAtProto))
 }
 
 #[derive(Template)]
@@ -68,7 +67,6 @@ struct_from_request! {
 
     struct AddAtProtoPost<'a> {
         form: poem::Result<Form<AddAtProtoForm>>,
-        csrf_verify: &'a CsrfVerifier,
         session: Data<&'a Session>,
         db: Data<&'a Db>,
         agents: Data<&'a AgentManager>,
@@ -94,8 +92,11 @@ impl FormHandler for AddAtProto {
         .into()
     }
 
-    async fn post(data: Self::PostData<'_>) -> Result<&'static str, Self::PostError> {
-        create_atproto_cred(data)
+    async fn post<'a>(
+        csrf: &'a CsrfVerifier,
+        data: Self::PostData<'a>,
+    ) -> Result<&'static str, Self::PostError> {
+        create_atproto_cred(csrf, data)
             .await
             .map(|()| routes::user::credentials::INDEX)
             .erase_err("Error adding ATProto credential", ())
@@ -106,24 +107,10 @@ impl FormHandler for AddAtProto {
     }
 }
 
-#[handler]
-async fn get_add_atproto(locale: Locale, data: AddAtProtoGet<'_>) -> impl IntoResponse {
-    form_get::<AddAtProto>(locale, data).await
-}
-
-#[handler]
-async fn post_add_atproto(
-    locale: Locale,
-    render: AddAtProtoGet<'_>,
-    post: AddAtProtoPost<'_>,
-) -> Response {
-    form_post::<AddAtProto>(locale, render, post).await
-}
-
 async fn create_atproto_cred(
+    csrf_verify: &CsrfVerifier,
     AddAtProtoPost {
         form,
-        csrf_verify,
         session,
         db,
         agents,

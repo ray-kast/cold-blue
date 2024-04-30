@@ -1,4 +1,4 @@
-use std::{time::Duration};
+use std::time::Duration;
 
 use deadpool::{managed::Timeouts, Runtime};
 use diesel_async::{
@@ -13,7 +13,7 @@ mod schema;
 pub mod user;
 
 pub mod prelude {
-    pub use diesel::{prelude::*};
+    pub use diesel::prelude::*;
     pub use diesel_async::RunQueryDsl;
     pub use uuid::Uuid;
 

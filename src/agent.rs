@@ -80,28 +80,16 @@ impl AgentManager {
 
                     match evt {
                         Ok(Some(now)) => {
+                            debug!("Starting ATProto agent cleanup...");
+
                             let dropped_at = now - atp_cleanup_timeout;
 
-                            let mut dropped = 0;
-                            for pair in &this.agents {
-                                let key = *pair.key();
-                                drop(pair);
-
-                                // TODO: check this for deadlocks
-                                if this
-                                    .agents
-                                    .remove_if(&key, |_, v| {
-                                        v.dropped_at.lock().is_some_and(|d| d <= dropped_at)
-                                    })
-                                    .is_some()
-                                {
-                                    dropped += 1;
-                                }
-                            }
-
-                            if dropped > 0 {
-                                debug!(%dropped, "Cleaned up dead ATProto agents");
-                            }
+                            let mut dropped = 0_u32;
+                            this.agents.retain(|_, v| {
+                                let dead = v.dropped_at.lock().is_some_and(|d| d <= dropped_at);
+                                dropped += u32::from(dead);
+                                !dead
+                            });
                         },
                         Ok(None) | Err(_) => {
                             debug!("Stopping ATProto agent manager...");
@@ -221,7 +209,7 @@ impl Agent {
                 .map(|get_feed::Output { cursor, feed }| (cursor, feed)),
         }?;
 
-        debug!("{:#?}", feed.first());
+        debug!("{:x?}", feed.first());
 
         Ok(())
     }

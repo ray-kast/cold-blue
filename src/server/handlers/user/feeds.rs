@@ -14,11 +14,8 @@ pub fn route() -> impl IntoEndpoint {
 
     Route::new()
         .at(routes::INDEX, get(index))
-        .at(routes::ADD, get(get_add).post(post_add))
-        .at(
-            routes::ADD_ATPROTO,
-            get(get_add_atproto).post(post_add_atproto),
-        )
+        .at(routes::ADD, form(Add))
+        .at(routes::ADD_ATPROTO, form(AddAtProto))
 }
 
 #[derive(Template)]
@@ -71,7 +68,6 @@ struct_from_request! {
 
     struct AddPost<'a> {
         form: poem::Result<Form<AddForm>>,
-        csrf_verify: &'a CsrfVerifier,
         session: Data<&'a Session>,
         cookies: &'a CookieJar,
         db: Data<&'a Db>,
@@ -103,8 +99,11 @@ impl FormHandler for Add {
         .into()
     }
 
-    async fn post(data: Self::PostData<'_>) -> Result<&'static str, Self::PostError> {
-        decrypt_feed_cred(data)
+    async fn post<'a>(
+        csrf: &'a CsrfVerifier,
+        data: Self::PostData<'a>,
+    ) -> Result<&'static str, Self::PostError> {
+        decrypt_feed_cred(csrf, data)
             .await
             .erase_err("Error decrypting feed credentials", ())
     }
@@ -118,9 +117,9 @@ impl FormHandler for Add {
 }
 
 async fn decrypt_feed_cred(
+    csrf_verify: &CsrfVerifier,
     AddPost {
         form,
-        csrf_verify,
         session,
         cookies,
         db,
@@ -156,16 +155,6 @@ async fn decrypt_feed_cred(
     state.set_private(cookies)?;
 
     Ok(route)
-}
-
-#[handler]
-async fn get_add(locale: Locale, data: AddGet<'_>) -> impl IntoResponse {
-    form_get::<Add>(locale, data).await
-}
-
-#[handler]
-async fn post_add(locale: Locale, render: AddGet<'_>, post: AddPost<'_>) -> Response {
-    form_post::<Add>(locale, render, post).await
 }
 
 struct AddAtProto;
@@ -212,7 +201,6 @@ struct_from_request! {
 
     struct AddAtProtoPost<'a> {
         form: poem::Result<Form<AddAtProtoForm>>,
-        csrf_verify: &'a CsrfVerifier,
         session: Data<&'a Session>,
         cookies: &'a CookieJar,
         db: Data<&'a Db>,
@@ -248,8 +236,11 @@ impl FormHandler for AddAtProto {
         .render_response()
     }
 
-    async fn post(data: Self::PostData<'_>) -> Result<&'static str, Self::PostError> {
-        create_atproto_feed(data)
+    async fn post<'a>(
+        csrf: &'a CsrfVerifier,
+        data: Self::PostData<'a>,
+    ) -> Result<&'static str, Self::PostError> {
+        create_atproto_feed(csrf, data)
             .await
             .map(|()| routes::user::feeds::INDEX)
             .erase_err("Error creating ATProto feed", ())
@@ -261,9 +252,9 @@ impl FormHandler for AddAtProto {
 }
 
 async fn create_atproto_feed(
+    csrf_verify: &CsrfVerifier,
     AddAtProtoPost {
         form,
-        csrf_verify,
         session,
         cookies,
         db,
@@ -272,10 +263,7 @@ async fn create_atproto_feed(
 ) -> Result<()> {
     let Form(AddAtProtoForm { csrf, name, ty }) = form.anyhow_disp("Invalid ATProto feed form")?;
 
-    let Ok(AddFeedState::AtProto {
-        credentials, ..
-    }) = AddFeedState::get_private(cookies)
-    else {
+    let Ok(AddFeedState::AtProto { credentials, .. }) = AddFeedState::get_private(cookies) else {
         todo!()
     };
 
@@ -287,26 +275,17 @@ async fn create_atproto_feed(
         .context("Invalid user")?;
     let key = session.upgrade(&user)?;
 
-    let cred = Credential::from_id(&mut db, &credentials).await?.context("Invalid credentials")?;
+    let cred = Credential::from_id(&mut db, &credentials)
+        .await?
+        .context("Invalid credentials")?;
     let decrypted = cred.decrypt::<AtProtoCredential>(&key)?;
 
     let agent = decrypted.login(&agents).await.context("Error logging in")?;
 
-    let () = agent.get_feed(&ty.into()).await.context("Error loading feed")?;
+    let () = agent
+        .get_feed(&ty.into())
+        .await
+        .context("Error loading feed")?;
 
     Ok(())
-}
-
-#[handler]
-async fn get_add_atproto(locale: Locale, data: AddAtProtoGet<'_>) -> impl IntoResponse {
-    form_get::<AddAtProto>(locale, data).await
-}
-
-#[handler]
-async fn post_add_atproto(
-    locale: Locale,
-    render: AddAtProtoGet<'_>,
-    post: AddAtProtoPost<'_>,
-) -> Response {
-    form_post::<AddAtProto>(locale, render, post).await
 }

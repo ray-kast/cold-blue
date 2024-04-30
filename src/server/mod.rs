@@ -1,8 +1,8 @@
 mod boot;
+mod cookies;
 #[allow(clippy::too_many_arguments)]
 mod handlers;
 mod locale;
-mod cookies;
 mod session;
 
-pub use boot::{ServerOpts, run};
+pub use boot::{run, ServerOpts};
