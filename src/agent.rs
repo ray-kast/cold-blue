@@ -157,6 +157,8 @@ struct AgentInner {
     dropped_at: parking_lot::Mutex<Option<Instant>>,
 }
 
+pub struct FeedCursor(String);
+
 impl Drop for Agent {
     fn drop(&mut self) {
         let dropped_at = Instant::now();
@@ -177,7 +179,10 @@ impl Agent {
     #[inline]
     fn agent(&self) -> &AtpAgent<MemorySessionStore, ReqwestClient> { &self.0.agent }
 
-    pub async fn get_feed(&self, feed: &Feed) -> Result {
+    pub async fn get_feed(&self, feed: Feed, cursor: Option<FeedCursor>, limit: u8) -> Result {
+        let cursor = cursor.map(|FeedCursor(c)| c);
+        let limit = Some(limit.try_into().unwrap());
+
         let (cursor, feed) = match feed {
             Feed::Home(HomeFeed { algorithm }) => self
                 .agent()
@@ -186,13 +191,14 @@ impl Agent {
                 .bsky
                 .feed
                 .get_timeline(get_timeline::Parameters {
-                    algorithm: algorithm.clone(),
-                    cursor: None,
-                    limit: Some(100.try_into().unwrap()),
+                    algorithm,
+                    cursor,
+                    limit,
                 })
                 .await
                 .context("Error fetching home feed")
                 .map(|get_timeline::Output { cursor, feed }| (cursor, feed)),
+
             Feed::Gen(FeedGen { feed }) => self
                 .agent()
                 .api
@@ -200,9 +206,9 @@ impl Agent {
                 .bsky
                 .feed
                 .get_feed(get_feed::Parameters {
-                    cursor: None,
-                    feed: feed.into(),
-                    limit: Some(100.try_into().unwrap()),
+                    cursor,
+                    feed,
+                    limit,
                 })
                 .await
                 .context("Error fetching generated feed")
@@ -215,20 +221,20 @@ impl Agent {
     }
 }
 
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub enum Feed {
     Home(HomeFeed),
     Gen(FeedGen),
 }
 
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct HomeFeed {
     pub algorithm: Option<String>,
 }
 
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct FeedGen {
     pub feed: String,

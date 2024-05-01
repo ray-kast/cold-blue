@@ -1,0 +1,25 @@
+{% extends "layout.html" %}
+{% import "macros.html" as macros %}
+
+{% block heading %}{{ l.t("add-feed") }}{% endblock heading %}
+{% block content %}
+  <form data-secure-ctx action="{{ routes::user::feeds::ADD_CONFIRM }}" method="post">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <table>
+      <tbody>
+        {% call macros::error_2col(error) %}
+        <tr>
+          <th><label for="name">{{ l.t("feed-name") }}</label></th>
+          <td>
+            <input id="atproto-name" type="text" name="name" required autofocus>
+          </td>
+        </tr>
+        <tr>
+          <td colspan="2"><input type="submit" value="{{ l.t("add-feed-submit") }}"></td>
+        </tr>
+      </tbody>
+    </table>
+  </form>
+{% endblock content %}
+
+{# vim:set ft=htmldjango: #}

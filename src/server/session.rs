@@ -3,10 +3,7 @@ use std::{ops::Deref, time::Duration};
 use ed25519_dalek::ed25519;
 use jsonwebtoken as jwt;
 use poem::{
-    web::{
-        cookie::{Cookie, CookieJar, CookieKey, PrivateCookieJar, SameSite},
-        CsrfVerifier, Form,
-    },
+    web::cookie::{Cookie, CookieJar, CookieKey, PrivateCookieJar, SameSite},
     Endpoint, IntoResponse, Middleware,
 };
 
@@ -206,8 +203,7 @@ impl SessionManager {
 
     pub async fn auth(
         &self,
-        form: poem::Result<Form<AuthForm>>,
-        csrf_verify: &CsrfVerifier,
+        form: AuthForm,
         cookies: &CookieJar,
         creds: &CredentialManager,
         db: &Db,
@@ -216,17 +212,11 @@ impl SessionManager {
             return Err(AuthError::AlreadyLoggedIn);
         }
 
-        // TODO: make this more descriptive?
-        let Form(AuthForm {
-            csrf,
+        let AuthForm {
             username,
             password,
             remember,
-        }) = form.erase_err_disp("Invalid auth form body", AuthError::BadRequest)?;
-
-        if !csrf_verify.is_valid(&csrf) {
-            return Err(AuthError::BadRequest);
-        }
+        } = form;
 
         let remember = match &*remember {
             "" => false,
@@ -280,7 +270,6 @@ impl SessionManager {
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AuthForm {
-    csrf: String,
     username: Username,
     password: Password,
     #[serde(default)]

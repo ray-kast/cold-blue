@@ -126,3 +126,20 @@ impl<S: AsRef<[T]> + TryInto<[T; N], Error = S>, T, const N: usize> TryIntoArray
         })
     }
 }
+
+pub trait OptionExt {
+    type Output;
+
+    fn ok_or_log<E>(self, msg: &str, err: E) -> Result<Self::Output, E>;
+}
+
+impl<T> OptionExt for Option<T> {
+    type Output = T;
+
+    fn ok_or_log<E>(self, msg: &str, err: E) -> Result<Self::Output, E> {
+        self.ok_or_else(|| {
+            tracing::error!("{msg}");
+            err
+        })
+    }
+}

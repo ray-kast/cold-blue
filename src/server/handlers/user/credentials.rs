@@ -43,6 +43,14 @@ pub async fn index(l: Locale, session: Data<&Session>, db: Data<&Db>) -> Templat
     IndexTemplate { l, creds }.into()
 }
 
+struct AddError;
+
+impl From<AddError> for FormError {
+    fn from(value: AddError) -> Self {
+        FormError::Rerender(StatusCode::BAD_REQUEST, "add-credential-error-invalid")
+    }
+}
+
 struct AddAtProto;
 
 #[derive(Template)]
@@ -55,7 +63,6 @@ struct AddAtProtoTemplate {
 
 #[derive(serde::Deserialize)]
 pub struct AddAtProtoForm {
-    csrf: String,
     #[serde(flatten)]
     cred: NamedAtProtoCredential,
 }
@@ -66,7 +73,6 @@ struct_from_request! {
     }
 
     struct AddAtProtoPost<'a> {
-        form: poem::Result<Form<AddAtProtoForm>>,
         session: Data<&'a Session>,
         db: Data<&'a Db>,
         agents: Data<&'a AgentManager>,
@@ -74,10 +80,12 @@ struct_from_request! {
 }
 
 impl FormHandler for AddAtProto {
+    type Form = AddAtProtoForm;
     type PostData<'a> = AddAtProtoPost<'a>;
-    type PostError = ();
     type RenderData<'a> = AddAtProtoGet<'a>;
     type Rendered = Templated<AddAtProtoTemplate>;
+
+    const BAD_REQUEST: &'static str = "add-credential-error-invalid";
 
     async fn render(
         l: Locale,
@@ -92,43 +100,34 @@ impl FormHandler for AddAtProto {
         .into()
     }
 
-    async fn post<'a>(
-        csrf: &'a CsrfVerifier,
-        data: Self::PostData<'a>,
-    ) -> Result<&'static str, Self::PostError> {
-        create_atproto_cred(csrf, data)
+    async fn post(
+        AddAtProtoForm { cred }: Self::Form,
+        AddAtProtoPost {
+            session,
+            db,
+            agents,
+        }: Self::PostData<'_>,
+    ) -> Result<&'static str, FormError> {
+        let mut db = db
+            .get()
             .await
-            .map(|()| routes::user::credentials::INDEX)
-            .erase_err("Error adding ATProto credential", ())
+            .erase_err("Error connecting to database", AddError)?;
+        let user = User::from_id(&mut db, session.id())
+            .await
+            .erase_err("Error loading current user from database", AddError)?
+            .ok_or_log("Invalid user", AddError)?;
+        let key = session
+            .upgrade(&user)
+            .erase_err("Error loading user credential key", AddError)?;
+
+        let _agent = cred
+            .login(&agents)
+            .await
+            .erase_err("Error verifying login", AddError)?;
+        let _cred = Credential::create(&mut db, &key, cred)
+            .await
+            .erase_err("Error writing credential to database", AddError)?;
+
+        Ok(routes::user::credentials::INDEX)
     }
-
-    fn handle_error(error: Self::PostError) -> FormError {
-        FormError::Rerender(StatusCode::BAD_REQUEST, "add-credential-error-invalid")
-    }
-}
-
-async fn create_atproto_cred(
-    csrf_verify: &CsrfVerifier,
-    AddAtProtoPost {
-        form,
-        session,
-        db,
-        agents,
-    }: AddAtProtoPost<'_>,
-) -> Result<()> {
-    let Form(AddAtProtoForm { csrf, cred }) =
-        form.anyhow_disp("Invalid ATProto credential form")?;
-
-    ensure!(csrf_verify.is_valid(&csrf), "Invalid CSRF token");
-
-    let mut db = db.get().await?;
-    let user = User::from_id(&mut db, session.id())
-        .await?
-        .context("Invalid user")?;
-    let key = session.upgrade(&user)?;
-
-    let _agent = cred.login(&agents).await.context("Error verifying login")?;
-    let _cred = Credential::create(&mut db, &key, cred).await?;
-
-    Ok(())
 }

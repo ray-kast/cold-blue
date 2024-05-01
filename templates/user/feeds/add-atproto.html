@@ -15,12 +15,6 @@
     <tbody>
       {% call macros::error_2col(error) %}
       <tr>
-        <th><label for="name">{{ l.t("feed-name") }}</label></th>
-        <td>
-          <input id="atproto-name" type="text" name="name" required autofocus>
-        </td>
-      </tr>
-      <tr>
         <th colspan="2">{{ l.t("credential-login-info") }}</th>
       </tr>
       <tr>
@@ -37,7 +31,7 @@
       <tr>
         <th><label for="atproto-algorithm">{{ l.t("feed-atproto-algorithm") }}</label></th>
         <td>
-          <input id="atproto-algorithm" form="atproto-home" type="text" name="name" placeholder="{{ l.t("advanced-placeholder") }}">
+          <input id="atproto-algorithm" form="atproto-home" type="text" name="algorithm" placeholder="{{ l.t("advanced-placeholder") }}">
         </td>
       </tr>
       <tr>

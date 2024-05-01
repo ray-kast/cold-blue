@@ -13,6 +13,7 @@ pub enum Error {
 
 pub trait CookieName {
     const COOKIE_NAME: &'static str;
+    const COOKIE_PATH: &'static str;
 
     const REQUIRE_PRIVATE: bool = true;
 
@@ -33,6 +34,7 @@ fn decode_cookie<T: CookieName + for<'de> Deserialize<'de>>(
 
 fn encode_cookie<T: CookieName + Serialize>(val: &T) -> Result<Cookie, Error> {
     let mut cookie = Cookie::new_with_str(T::COOKIE_NAME, ron::to_string(val)?);
+    cookie.set_path(T::COOKIE_PATH);
     T::build_cookie(&mut cookie);
     Ok(cookie)
 }
@@ -54,9 +56,7 @@ pub trait CookieExt: CookieName + Serialize + for<'de> Deserialize<'de> {
         encode_cookie(self).map(|c| Self::private_jar(cookies).add(c))
     }
 
-    fn delete_private(&self, cookies: &CookieJar) {
-        Self::private_jar(cookies).remove(Self::COOKIE_NAME);
-    }
+    fn delete_private(cookies: &CookieJar) { Self::private_jar(cookies).remove(Self::COOKIE_NAME); }
 
     fn get_cookie(cookies: &CookieJar) -> Result<Self, Error> {
         decode_cookie(public_jar::<Self>(cookies).get(Self::COOKIE_NAME))
@@ -66,9 +66,7 @@ pub trait CookieExt: CookieName + Serialize + for<'de> Deserialize<'de> {
         encode_cookie(self).map(|c| public_jar::<Self>(cookies).add(c))
     }
 
-    fn delete_cookie(&self, cookies: &CookieJar) {
-        public_jar::<Self>(cookies).remove(Self::COOKIE_NAME);
-    }
+    fn delete_cookie(cookies: &CookieJar) { public_jar::<Self>(cookies).remove(Self::COOKIE_NAME); }
 }
 
 impl<T: CookieName + Serialize + for<'de> Deserialize<'de>> CookieExt for T {}

@@ -43,6 +43,7 @@ feed-atproto-algorithm = Algorithm
 add-feed = Add feed
 add-feed-select-credentials = Select account to log in as
 add-feed-next = Next
+add-feed-submit = Add
 add-feed-atproto = Add ATProto (Bluesky) feed
 add-feed-atproto-submit-home = Add home feed
 add-feed-atproto-submit-gen = Add generated feed

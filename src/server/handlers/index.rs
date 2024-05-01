@@ -35,7 +35,6 @@ struct_from_request! {
     }
 
     struct LoginPost<'a> {
-        form: poem::Result<Form<AuthForm>>,
         cookies: &'a CookieJar,
         sessions: Data<&'a SessionManager>,
         creds: Data<&'a CredentialManager>,
@@ -44,10 +43,12 @@ struct_from_request! {
 }
 
 impl FormHandler for Login {
+    type Form = AuthForm;
     type PostData<'a> = LoginPost<'a>;
-    type PostError = AuthError;
     type RenderData<'a> = LoginGet<'a>;
     type Rendered = Response;
+
+    const BAD_REQUEST: &'static str = "login-error-invalid";
 
     async fn render(
         l: Locale,
@@ -70,35 +71,36 @@ impl FormHandler for Login {
         .render_response()
     }
 
-    async fn post<'a>(
-        csrf: &'a CsrfVerifier,
+    async fn post(
+        form: Self::Form,
         LoginPost {
-            form,
             cookies,
             sessions,
             creds,
             db,
-        }: Self::PostData<'a>,
-    ) -> Result<&'static str, Self::PostError> {
+        }: Self::PostData<'_>,
+    ) -> Result<&'static str, FormError> {
         sessions
-            .auth(form, csrf, cookies, &creds, &db)
+            .auth(form, cookies, &creds, &db)
             .await
             .map(|_| routes::user::INDEX)
+            .map_err(login_error)
     }
+}
 
-    fn handle_error(err: Self::PostError) -> FormError {
-        match err {
-            AuthError::BadRequest => {
-                FormError::Rerender(StatusCode::BAD_REQUEST, "login-error-invalid")
-            },
-            AuthError::InternalError => {
-                FormError::Rerender(StatusCode::INTERNAL_SERVER_ERROR, "error-internal")
-            },
-            AuthError::Unauthorized => {
-                FormError::Rerender(StatusCode::UNAUTHORIZED, "login-error-unauthorized")
-            },
-            AuthError::AlreadyLoggedIn => FormError::SeeOther(routes::user::INDEX),
-        }
+#[allow(clippy::needless_pass_by_value)]
+fn login_error(err: AuthError) -> FormError {
+    match err {
+        AuthError::BadRequest => {
+            FormError::Rerender(StatusCode::BAD_REQUEST, "login-error-invalid")
+        },
+        AuthError::InternalError => {
+            FormError::Rerender(StatusCode::INTERNAL_SERVER_ERROR, "error-internal")
+        },
+        AuthError::Unauthorized => {
+            FormError::Rerender(StatusCode::UNAUTHORIZED, "login-error-unauthorized")
+        },
+        AuthError::AlreadyLoggedIn => FormError::SeeOther(routes::user::INDEX),
     }
 }
 

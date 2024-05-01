@@ -38,6 +38,7 @@ mod routes {
             pub const INDEX: &str = concatcp!(super::INDEX, "/feeds");
             pub const ADD: &str = concatcp!(INDEX, "/add");
             pub const ADD_ATPROTO: &str = concatcp!(ADD, "/atproto");
+            pub const ADD_CONFIRM: &str = concatcp!(ADD, "/confirm");
         }
     }
 }
@@ -49,7 +50,7 @@ mod prelude {
         http::StatusCode,
         i18n::Locale,
         post,
-        web::{cookie::CookieJar, CsrfToken, CsrfVerifier, Data, Form, Redirect},
+        web::{cookie::CookieJar, CsrfToken, Data, Redirect},
         EndpointExt, IntoEndpoint, IntoResponse, Response, Route,
     };
 
@@ -60,7 +61,7 @@ mod prelude {
         },
         TemplateExt, Templated,
     };
-    pub(super) use super::{form, form_get, form_post, routes, FormError, FormHandler, LocaleExt};
+    pub(super) use super::{form, routes, FormError, FormHandler, LocaleExt};
     pub use crate::{
         db::{credentials::CredentialManager, Db},
         prelude::*,
@@ -153,7 +154,9 @@ trait FormHandler: Send + 'static {
     type Rendered: IntoResponse;
 
     type PostData<'a>: FromRequest<'a> + Send;
-    type PostError: Send;
+    type Form: serde::de::DeserializeOwned + Send;
+
+    const BAD_REQUEST: &'static str;
 
     fn render(
         locale: Locale,
@@ -162,12 +165,10 @@ trait FormHandler: Send + 'static {
     ) -> impl Future<Output = Self::Rendered> + Send + '_;
 
     /// Returns a redirect route on success
-    fn post<'a>(
-        csrf: &'a poem::web::CsrfVerifier,
-        data: Self::PostData<'a>,
-    ) -> impl Future<Output = Result<&'static str, Self::PostError>> + Send + 'a;
-
-    fn handle_error(error: Self::PostError) -> FormError;
+    fn post(
+        form: Self::Form,
+        data: Self::PostData<'_>,
+    ) -> impl Future<Output = Result<&'static str, FormError>> + Send + '_;
 }
 
 struct FormGet<'a, T: FormHandler> {
@@ -176,9 +177,15 @@ struct FormGet<'a, T: FormHandler> {
 }
 
 impl<'a, T: FormHandler> FormGet<'a, T> {
+    #[instrument(
+        level = "error",
+        name = "form_get",
+        skip(self),
+        fields(form = std::any::type_name::<T>()),
+    )]
     pub fn handle(self) -> impl Future<Output = T::Rendered> + 'a {
         let Self { locale, data } = self;
-        T::render(locale, data, None)
+        T::render(locale, data, None).in_current_span()
     }
 }
 
@@ -200,11 +207,41 @@ impl<'a, T: FormHandler> poem::FromRequest<'a> for FormGet<'a, T> {
     }
 }
 
+type FormBody<T> = poem::Result<poem::web::Form<CsrfWrapper<<T as FormHandler>::Form>>>;
+
+enum PostError<E> {
+    Form(poem::Error),
+    Csrf,
+    Handler(E),
+}
+
+impl<E: Into<FormError>> PostError<E> {
+    fn into_form_error<F: FormHandler>(self) -> FormError {
+        match self {
+            Self::Form(err) => {
+                error!(%err, "Invalid form request");
+
+                FormError::Rerender(StatusCode::BAD_REQUEST, F::BAD_REQUEST)
+            },
+            Self::Csrf => FormError::Rerender(StatusCode::BAD_REQUEST, F::BAD_REQUEST),
+            Self::Handler(e) => e.into(),
+        }
+    }
+}
+
 struct FormPost<'a, T: FormHandler> {
     pub locale: Locale,
     pub csrf: &'a poem::web::CsrfVerifier,
+    pub form: FormBody<T>,
     pub render: T::RenderData<'a>,
     pub data: T::PostData<'a>,
+}
+
+#[derive(serde::Deserialize)]
+struct CsrfWrapper<T> {
+    csrf: String,
+    #[serde(flatten)]
+    form: T,
 }
 
 impl<'a, T: FormHandler> poem::FromRequest<'a> for FormPost<'a, T> {
@@ -223,14 +260,19 @@ impl<'a, T: FormHandler> poem::FromRequest<'a> for FormPost<'a, T> {
         .and_then(move |(locale, csrf, b)| {
             <T::RenderData<'a> as poem::FromRequest>::from_request_without_body(req).and_then(
                 move |render| {
-                    <T::PostData<'a> as poem::FromRequest>::from_request(req, b).map_ok(|data| {
-                        Self {
-                            locale,
-                            csrf,
-                            render,
-                            data,
-                        }
-                    })
+                    <T::PostData<'a> as poem::FromRequest>::from_request_without_body(req).and_then(
+                        |data| {
+                            <FormBody<T> as poem::FromRequest>::from_request(req, b).map_ok(
+                                |form| Self {
+                                    locale,
+                                    csrf,
+                                    form,
+                                    render,
+                                    data,
+                                },
+                            )
+                        },
+                    )
                 },
             )
         })
@@ -240,27 +282,47 @@ impl<'a, T: FormHandler> poem::FromRequest<'a> for FormPost<'a, T> {
 impl<'a, T: FormHandler> FormPost<'a, T> {
     // TODO: make this async once they fix the stupid lifetime bug
     //       https://github.com/rust-lang/rust/issues/100013
+    #[instrument(
+        level = "error",
+        name = "form_post",
+        skip(self),
+        fields(form = std::any::type_name::<T>()),
+    )]
     pub fn handle(self) -> impl Future<Output = Response> + Send + 'a {
         let Self {
             locale,
             csrf,
+            form,
             render,
             data,
         } = self;
 
-        T::post(csrf, data)
-            .map_ok(|r| poem::web::Redirect::see_other(r).into_response())
-            .or_else(|e| match T::handle_error(e) {
-                FormError::Rerender(s, m) => Either::Left({
-                    let m = locale.t(m);
-                    T::render(locale, render, Some(m))
-                        .map(move |r| Ok(r.with_status(s).into_response()))
-                }),
-                FormError::SeeOther(r) => Either::Right(future::ready(Ok(
-                    poem::web::Redirect::see_other(r).into_response(),
-                ))),
-            })
-            .unwrap_or_else(|e: Infallible| match e {})
+        future::ready(form.map_err(PostError::Form).and_then(
+            |poem::web::Form(CsrfWrapper { csrf: c, form })| {
+                (csrf.is_valid(&c)).then_some(form).ok_or(PostError::Csrf)
+            },
+        ))
+        .and_then(|f| T::post(f, data).map_err(PostError::Handler))
+        .map_ok(|r| poem::web::Redirect::see_other(r).into_response())
+        .or_else(|e| match e.into_form_error::<T>() {
+            FormError::Rerender(s, m) => Either::Left({
+                let m = locale.t(m);
+                T::render(locale, render, Some(m)).map(move |r| {
+                    let mut r = r.into_response();
+
+                    if r.status() == StatusCode::default() {
+                        r.set_status(s);
+                    }
+
+                    Ok(r)
+                })
+            }),
+            FormError::SeeOther(r) => Either::Right(future::ready(Ok(
+                poem::web::Redirect::see_other(r).into_response(),
+            ))),
+        })
+        .unwrap_or_else(|e: Infallible| match e {})
+        .in_current_span()
 
         // async move {
         //     match T::post(data).await {
