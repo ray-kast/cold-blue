@@ -12,10 +12,10 @@ use rand::RngCore;
 use sha2::Sha512;
 use tokio::{
     sync::oneshot,
-    time::{interval, Instant},
+    time::{interval_at, Instant},
 };
 
-use crate::{db::user::rng, prelude::*};
+use crate::{db::{feed::{AtProtoFeed, FeedParams}, user::rng}, prelude::*};
 
 #[derive(Debug, Clone, Copy, clap::Args)]
 #[allow(clippy::doc_markdown)]
@@ -71,7 +71,8 @@ impl AgentManager {
             async move {
                 let canary = AbortCanary::new();
 
-                let mut int = interval(atp_cleanup_interval);
+                let mut int =
+                    interval_at(Instant::now() + atp_cleanup_interval, atp_cleanup_interval);
                 loop {
                     let evt = tokio::select! {
                         i = int.tick() => Ok(Some(i)),
@@ -80,7 +81,7 @@ impl AgentManager {
 
                     match evt {
                         Ok(Some(now)) => {
-                            debug!("Starting ATProto agent cleanup...");
+                            trace!("Starting ATProto agent cleanup...");
 
                             let dropped_at = now - atp_cleanup_timeout;
 
@@ -90,6 +91,12 @@ impl AgentManager {
                                 dropped += u32::from(dead);
                                 !dead
                             });
+
+                            if dropped > 0 {
+                                debug!(dropped, "Finished ATProto agent cleanup");
+                            } else {
+                                trace!("No agents were cleaned up");
+                            }
                         },
                         Ok(None) | Err(_) => {
                             debug!("Stopping ATProto agent manager...");
@@ -179,12 +186,12 @@ impl Agent {
     #[inline]
     fn agent(&self) -> &AtpAgent<MemorySessionStore, ReqwestClient> { &self.0.agent }
 
-    pub async fn get_feed(&self, feed: Feed, cursor: Option<FeedCursor>, limit: u8) -> Result {
+    pub async fn get_feed(&self, feed: AtProtoFeed, cursor: Option<FeedCursor>, limit: u8) -> Result {
         let cursor = cursor.map(|FeedCursor(c)| c);
         let limit = Some(limit.try_into().unwrap());
 
         let (cursor, feed) = match feed {
-            Feed::Home(HomeFeed { algorithm }) => self
+            AtProtoFeed::Home { algorithm } => self
                 .agent()
                 .api
                 .app
@@ -199,7 +206,7 @@ impl Agent {
                 .context("Error fetching home feed")
                 .map(|get_timeline::Output { cursor, feed }| (cursor, feed)),
 
-            Feed::Gen(FeedGen { feed }) => self
+            AtProtoFeed::Gen { feed } => self
                 .agent()
                 .api
                 .app
@@ -219,23 +226,4 @@ impl Agent {
 
         Ok(())
     }
-}
-
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
-#[serde(deny_unknown_fields)]
-pub enum Feed {
-    Home(HomeFeed),
-    Gen(FeedGen),
-}
-
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct HomeFeed {
-    pub algorithm: Option<String>,
-}
-
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct FeedGen {
-    pub feed: String,
 }

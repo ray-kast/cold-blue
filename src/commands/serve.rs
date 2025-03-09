@@ -67,7 +67,6 @@ impl ServeCommand {
         };
 
         // let shutdown = !matches!(ret, StopType::Closed(Err(_)));
-        let shutdown = true;
 
         let ret = match ret {
             StopType::Signal(Ok(Some(s))) => {
@@ -81,9 +80,9 @@ impl ServeCommand {
             StopType::Closed(Ok(Ok(()))) => Err(anyhow!("Server hung up unexpectedly")),
         };
 
-        if shutdown {
-            server.stop_tx.send(()).ok();
-        }
+        // if shutdown {
+        server.stop_tx.send(()).ok();
+        // }
 
         ret
     }

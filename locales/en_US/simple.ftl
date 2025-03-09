@@ -36,6 +36,7 @@ add-credential-error-invalid = There was a problem adding the credential, please
 feeds-heading = Feeds
 
 feed-name = Feed name
+feed-type = Type
 feed-atproto-home = Home (timeline) feed
 feed-atproto-gen = Generated/Curated feeds
 feed-atproto-algorithm = Algorithm

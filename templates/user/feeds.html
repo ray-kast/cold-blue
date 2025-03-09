@@ -2,7 +2,24 @@
 
 {% block heading %}{{ l.t("feeds-heading") }}{% endblock heading %}
 {% block content %}
-  hi
+  <table>
+    <thead>
+      <tr>
+        <th scope="col">{{ l.t("feed-name") }}</th>
+        <th scope="col">{{ l.t("feed-type") }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for feed in feeds %}
+        <tr>
+          <td>{{ feed.name() }}</td>
+          <td>
+            <code>{{ format!("{:?}", feed.params()) }}</code>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
   <nav>
     <ul>
       <li><a href="{{ routes::user::feeds::ADD }}">{{ l.t("add-feed") }}</a></li>

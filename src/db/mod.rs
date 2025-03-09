@@ -9,12 +9,14 @@ use diesel_async::{
 use crate::prelude::*;
 
 pub mod credentials;
+pub mod feed;
 mod schema;
 pub mod user;
 
 pub mod prelude {
     pub use diesel::prelude::*;
     pub use diesel_async::RunQueryDsl;
+    pub use serde_json::Value;
     pub use uuid::Uuid;
 
     pub use super::{schema::*, Connection};

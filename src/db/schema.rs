@@ -3,9 +3,9 @@
 diesel::table! {
     credentials (id) {
         id -> Uuid,
+        owner -> Uuid,
         #[max_length = 256]
         name -> Varchar,
-        owner -> Uuid,
         nonce -> Bytea,
         creds -> Bytea,
     }
@@ -15,8 +15,10 @@ diesel::table! {
     feeds (id) {
         id -> Uuid,
         owner -> Uuid,
+        #[max_length = 256]
+        name -> Varchar,
         creds -> Nullable<Uuid>,
-        params -> Nullable<Text>,
+        params -> Jsonb,
     }
 }
 

@@ -1,9 +1,10 @@
 use uuid::Uuid;
 
 use crate::{
-    agent::{AgentManager, Feed, FeedGen, HomeFeed},
+    agent::AgentManager,
     db::{
         credentials::{AtProtoCredential, Credential, CredentialPayload, CredentialView},
+        feed::{AtProtoFeed, Feed, FeedParams},
         user::User,
     },
     server::{handlers::prelude::*, session::Session},
@@ -23,10 +24,23 @@ pub fn route() -> impl IntoEndpoint {
 #[template(path = "user/feeds.html")]
 pub struct IndexTemplate {
     l: Locale,
+    feeds: Vec<Feed>,
+}
+
+pub async fn load_feeds(session: Data<&Session>, db: Data<&Db>) -> Result<Vec<Feed>> {
+    let mut db = db.get().await?;
+    Feed::from_owner(&mut db, session.id()).await
 }
 
 #[handler]
-pub fn index(l: Locale) -> Templated<IndexTemplate> { IndexTemplate { l }.into() }
+pub async fn index(l: Locale, session: Data<&Session>, db: Data<&Db>) -> Templated<IndexTemplate> {
+    let feeds = load_feeds(session, db)
+        .await
+        .erase_err("Error listing user feeds", ())
+        .unwrap_or_else(|()| Vec::new());
+
+    IndexTemplate { l, feeds }.into()
+}
 
 enum AddError {
     InvalidCredentials,
@@ -56,7 +70,7 @@ enum AddFeedState {
         username: String,
     },
     Confirm {
-        credentials: Uuid,
+        credentials: Option<Uuid>,
         ty: AddFeedType,
         preview: Vec<Post>,
     },
@@ -68,11 +82,28 @@ enum AddFeedType {
     AtProto(AddAtProtoType),
 }
 
+impl From<AddFeedType> for FeedParams {
+    fn from(value: AddFeedType) -> Self {
+        match value {
+            AddFeedType::AtProto(a) => FeedParams::AtProto(a.into()),
+        }
+    }
+}
+
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields, tag = "type", rename_all = "snake_case")]
 enum AddAtProtoType {
     Home { algorithm: Option<String> },
     Gen { feed: String },
+}
+
+impl From<AddAtProtoType> for AtProtoFeed {
+    fn from(value: AddAtProtoType) -> Self {
+        match value {
+            AddAtProtoType::Home { algorithm } => AtProtoFeed::Home { algorithm },
+            AddAtProtoType::Gen { feed } => AtProtoFeed::Gen { feed },
+        }
+    }
 }
 
 type Post = ();
@@ -212,15 +243,6 @@ struct AddAtProtoForm {
     ty: AddAtProtoType,
 }
 
-impl From<AddAtProtoType> for Feed {
-    fn from(value: AddAtProtoType) -> Self {
-        match value {
-            AddAtProtoType::Home { algorithm } => Self::Home(HomeFeed { algorithm }),
-            AddAtProtoType::Gen { feed } => Self::Gen(FeedGen { feed }),
-        }
-    }
-}
-
 struct_from_request! {
     struct AddAtProtoGet<'a> {
         csrf: &'a CsrfToken,
@@ -281,6 +303,15 @@ impl FormHandler for AddAtProto {
             return Err(AddError::Internal.into());
         };
 
+        let ty = match ty {
+            AddAtProtoType::Home { algorithm }
+                if algorithm.as_ref().is_some_and(|a| a.trim().is_empty()) =>
+            {
+                AddAtProtoType::Home { algorithm: None }
+            },
+            t => t,
+        };
+
         let mut db = db
             .get()
             .await
@@ -320,7 +351,7 @@ impl FormHandler for AddAtProto {
         let preview = vec![];
 
         AddFeedState::Confirm {
-            credentials,
+            credentials: Some(credentials),
             ty: AddFeedType::AtProto(ty),
             preview,
         }
@@ -355,6 +386,7 @@ struct_from_request! {
     }
 
     struct AddConfirmPost<'a> {
+        session: Data<&'a Session>,
         cookies: &'a CookieJar,
         db: Data<&'a Db>,
     }
@@ -374,12 +406,7 @@ impl FormHandler for AddConfirm {
         AddConfirmGet { csrf, cookies }: Self::RenderData<'_>,
         error: Option<String>,
     ) -> Self::Rendered {
-        let Ok(AddFeedState::Confirm {
-            credentials,
-            ty,
-            preview,
-        }) = AddFeedState::get_private(cookies)
-        else {
+        let Ok(AddFeedState::Confirm { preview, .. }) = AddFeedState::get_private(cookies) else {
             return Redirect::see_other(routes::user::feeds::ADD).into_response();
         };
 
@@ -394,7 +421,11 @@ impl FormHandler for AddConfirm {
 
     async fn post(
         AddConfirmForm { name }: Self::Form,
-        AddConfirmPost { cookies, db }: Self::PostData<'_>,
+        AddConfirmPost {
+            session,
+            cookies,
+            db,
+        }: Self::PostData<'_>,
     ) -> Result<&'static str, FormError> {
         let Ok(AddFeedState::Confirm {
             credentials, ty, ..
@@ -409,7 +440,9 @@ impl FormHandler for AddConfirm {
             .await
             .erase_err("Error connecting to database", AddError::Internal)?;
 
-        error!("Not yet implemented");
+        Feed::create(&mut db, *session.id(), name, credentials, ty)
+            .await
+            .erase_err("Error inserting feed into database", AddError::Internal)?;
 
         AddFeedState::delete_private(cookies);
 

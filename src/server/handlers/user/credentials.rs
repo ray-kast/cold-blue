@@ -43,11 +43,19 @@ pub async fn index(l: Locale, session: Data<&Session>, db: Data<&Db>) -> Templat
     IndexTemplate { l, creds }.into()
 }
 
-struct AddError;
+enum AddError {
+    Invalid,
+    Internal,
+}
 
 impl From<AddError> for FormError {
     fn from(value: AddError) -> Self {
-        FormError::Rerender(StatusCode::BAD_REQUEST, "add-credential-error-invalid")
+        match value {
+            AddError::Invalid => {
+                FormError::Rerender(StatusCode::BAD_REQUEST, "add-credential-error-invalid")
+            },
+            AddError::Internal => FormError::Rerender(StatusCode::BAD_REQUEST, "error-internal"),
+        }
     }
 }
 
@@ -111,22 +119,22 @@ impl FormHandler for AddAtProto {
         let mut db = db
             .get()
             .await
-            .erase_err("Error connecting to database", AddError)?;
+            .erase_err("Error connecting to database", AddError::Internal)?;
         let user = User::from_id(&mut db, session.id())
             .await
-            .erase_err("Error loading current user from database", AddError)?
-            .ok_or_log("Invalid user", AddError)?;
+            .erase_err("Error loading current user from database", AddError::Internal)?
+            .ok_or_log("Invalid user", AddError::Invalid)?;
         let key = session
             .upgrade(&user)
-            .erase_err("Error loading user credential key", AddError)?;
+            .erase_err("Error loading user credential key", AddError::Internal)?;
 
         let _agent = cred
             .login(&agents)
             .await
-            .erase_err("Error verifying login", AddError)?;
+            .erase_err("Error verifying login", AddError::Invalid)?;
         let _cred = Credential::create(&mut db, &key, cred)
             .await
-            .erase_err("Error writing credential to database", AddError)?;
+            .erase_err("Error writing credential to database", AddError::Internal)?;
 
         Ok(routes::user::credentials::INDEX)
     }

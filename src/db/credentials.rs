@@ -234,8 +234,8 @@ pub struct CredentialView {
 #[diesel(check_for_backend(Pg))]
 pub struct Credential {
     id: Uuid,
-    name: String,
     owner: Uuid,
+    name: String,
     nonce: Vec<u8>,
     creds: Vec<u8>,
 }
